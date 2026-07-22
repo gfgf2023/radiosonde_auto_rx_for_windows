@@ -8,7 +8,6 @@
 
 from __future__ import division, print_function
 import codecs
-import fcntl
 import logging
 import os
 import platform
@@ -26,6 +25,7 @@ from datetime import datetime, timedelta
 from math import radians, degrees, sin, cos, atan2, sqrt, pi
 from queue import Queue
 from . import __version__ as auto_rx_version
+from . import platform as autorx_platform
 
 
 # List of binaries we check for on startup
@@ -52,7 +52,10 @@ _timeout_cmd = None
 
 def timeout_cmd():
     global _timeout_cmd
-    if not _timeout_cmd:
+    if _timeout_cmd is None:
+        if autorx_platform.is_windows():
+            _timeout_cmd = ""
+            return _timeout_cmd
         t=shutil.which("gtimeout")
         if t:
             _timeout_cmd = "gtimeout -k 30 "
@@ -69,7 +72,8 @@ def check_rs_utils(config):
         Currently we just check there is a file present - we don't check functionality.
     """
     for _file in REQUIRED_RS_UTILS:
-        if not os.path.isfile(_file):
+        _executable = autorx_platform.resolve_executable(_file)
+        if not os.path.isfile(_executable):
             logging.critical("Binary %s does not exist - did you run build.sh?" % _file)
             return False
         _ = timeout_cmd()
@@ -780,6 +784,12 @@ def is_not_linux():
 
 def reset_usb(bus, device):
     """Reset the USB device with the given bus and device."""
+    if not sys.platform.startswith("linux"):
+        logging.warning("RTLSDR - USB reset is unavailable on this platform.")
+        return False
+
+    import fcntl
+
     usb_file_path = "/dev/bus/usb/%03d/%03d" % (bus, device)
     with open(usb_file_path, "w") as usb_file:
         # logging.debug('fcntl.ioctl(%s, %d)', usb_file_path, _USBDEVFS_RESET)
@@ -789,6 +799,9 @@ def reset_usb(bus, device):
         # This was just catching IOError, just catch everything and print.
         except Exception as e:
             logging.error(f"RTLSDR - USB Reset Failed - {str(e)}")
+            return False
+
+    return True
 
 
 

@@ -11,7 +11,6 @@ import logging
 import json
 import os
 import os.path
-import signal
 import subprocess
 import time
 import traceback
@@ -24,6 +23,7 @@ from .sonde_specific import fix_datetime, imet_unique_id
 from .fsk_demod import FSKDemodStats
 from .sdr_wrappers import test_sdr, get_sdr_iq_cmd, get_sdr_fm_cmd, get_sdr_name
 from .email_notification import EmailNotification
+from . import platform
 
 # Global valid sonde types list.
 VALID_SONDE_TYPES = [
@@ -1498,11 +1498,11 @@ class SondeDecoder(object):
 
             # Start the thread.
             self.decode_process = subprocess.Popen(
-                self.decoder_command,
+                platform.translate_command(self.decoder_command),
                 shell=True,
                 stdin=None,
                 stdout=subprocess.PIPE,
-                preexec_fn=os.setsid,
+                **platform.popen_kwargs(),
             )
 
         else:
@@ -1513,19 +1513,19 @@ class SondeDecoder(object):
 
             # Startup the subprocesses
             self.demod_process = subprocess.Popen(
-                self.decoder_command,
+                platform.translate_command(self.decoder_command),
                 shell=True,
                 stdin=None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=os.setsid,
+                **platform.popen_kwargs(),
             )
             self.decode_process = subprocess.Popen(
-                self.decoder_command_2,
+                platform.translate_command(self.decoder_command_2),
                 shell=True,
                 stdin=self.demod_process.stdout,
                 stdout=subprocess.PIPE,
-                preexec_fn=os.setsid,
+                **platform.popen_kwargs(),
             )
 
             self.demod_reader = AsynchronousFileReader(
@@ -1574,21 +1574,9 @@ class SondeDecoder(object):
         try:
             # Stop the async reader
             self.async_reader.stop()
-            # Send a SIGKILL to the subprocess PID via OS.
-            try:
-                os.killpg(os.getpgid(self.decode_process.pid), signal.SIGKILL)
-                if self.experimental_decoder:
-                    os.killpg(os.getpgid(self.demod_process.pid), signal.SIGKILL)
-            except Exception as e:
-                self.log_debug("SIGKILL via os.killpg failed. - %s" % str(e))
-            time.sleep(1)
-            try:
-                # Send a SIGKILL via subprocess
-                self.decode_process.kill()
-                if self.experimental_decoder:
-                    self.demod_process.kill()
-            except Exception as e:
-                self.log_debug("SIGKILL via subprocess.kill failed - %s" % str(e))
+            platform.terminate_process_tree(self.decode_process)
+            if self.experimental_decoder:
+                platform.terminate_process_tree(self.demod_process)
             # Finally, join the async reader.
             self.async_reader.join()
 

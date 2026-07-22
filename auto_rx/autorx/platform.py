@@ -1,5 +1,8 @@
 """Small platform-specific command helpers."""
 
+import os
+import signal
+import subprocess
 import sys
 
 
@@ -27,3 +30,51 @@ def translate_command(command):
     if is_windows():
         return command.replace("/dev/null", null_device())
     return command
+
+
+def run_command(command, timeout=None, **kwargs):
+    """Run a shell command with platform translation and a Python timeout."""
+    if isinstance(command, str):
+        command = translate_command(command)
+    kwargs.setdefault("shell", True)
+    return subprocess.run(command, timeout=timeout, **kwargs)
+
+
+def popen_kwargs():
+    """Return subprocess group settings suitable for the current platform."""
+    if is_windows():
+        return {
+            "creationflags": getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+            )
+        }
+    return {"preexec_fn": os.setsid}
+
+
+def terminate_process_tree(process):
+    """Terminate a decoder process and any children it started."""
+    if process is None:
+        return
+
+    if is_windows():
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    else:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except OSError:
+            pass
+
+    try:
+        process.kill()
+    except OSError:
+        pass
