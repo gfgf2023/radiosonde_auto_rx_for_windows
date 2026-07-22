@@ -514,7 +514,7 @@ def get_sdr_fm_cmd(
         )
         _cmd = (
             f"{_iq_cmd}"
-            f"./iq_dec --FM - {int(filter_bandwidth)} 16 2>/dev/null | "
+            f"./iq_dec --bo 16 --FM - {int(filter_bandwidth)} 16 2>/dev/null | "
             f"sox -t raw -r {int(filter_bandwidth)} -e s -b 16 -c 1 - "
             f"-r {int(sample_rate)} -b 16 -t wav - "
         )

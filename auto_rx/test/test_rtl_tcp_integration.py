@@ -116,7 +116,7 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec():
 
     assert "python -m autorx.rtl_tcp_rx" in command
     assert "--sample-rate 15000" in command
-    assert "./iq_dec --FM" in command
+    assert "./iq_dec --bo 16 --FM - 15000 16" in command
     assert "rtl_fm" not in command
 
 
