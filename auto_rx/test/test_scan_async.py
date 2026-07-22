@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from autorx import platform
 from autorx import scan_async
 from autorx import sdr_wrappers
@@ -86,3 +88,26 @@ def test_async_ka9q_command_preserves_windows_cmd_quoting(monkeypatch):
     )
 
     assert r'"C:\tools&qa\dft_detect.exe"' in captured["command"]
+
+
+def test_async_ka9q_command_rejects_windows_percent_expansion(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(
+        sdr_wrappers,
+        "get_sdr_iq_cmd",
+        lambda **kwargs: "pcmrecord %PATH% | ",
+    )
+    monkeypatch.setattr(sdr_wrappers, "get_sdr_name", lambda *args, **kwargs: "KA9Q sonde")
+    monkeypatch.setattr(sdr_wrappers, "shutdown_sdr", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scan_async.asyncio,
+        "create_subprocess_shell",
+        lambda *args, **kwargs: pytest.fail("command must not reach the shell"),
+    )
+
+    with pytest.raises(ValueError, match="percent"):
+        asyncio.run(
+            scan_async.detect_sonde_async(
+                frequency=401500000, rs_path="./", sdr_type="KA9Q", dwell_time=1
+            )
+        )

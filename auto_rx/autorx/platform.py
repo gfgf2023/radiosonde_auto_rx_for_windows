@@ -33,6 +33,7 @@ _LOCAL_DECODER_TOKEN = re.compile(
     r"(?<!\S)\./(?P<executable>[A-Za-z0-9_-]+)(?:\.exe)?(?=$|\s|[|;&])"
 )
 _CMD_METACHARACTERS = frozenset("&|<>()^\"")
+_CMD_ENVIRONMENT_EXPANSION = re.compile(r"%[^%]+%")
 
 
 def is_windows():
@@ -75,12 +76,15 @@ def prepare_shell_command(command):
         return command
 
     if isinstance(command, str):
-        if "%" in command:
+        if _CMD_ENVIRONMENT_EXPANSION.search(command):
             raise ValueError("Windows CMD commands containing percent signs are not supported.")
         return translate_command(command)
 
     if isinstance(command, (list, tuple)):
-        if any(isinstance(part, str) and "%" in part for part in command):
+        if any(
+            isinstance(part, str) and _CMD_ENVIRONMENT_EXPANSION.search(part)
+            for part in command
+        ):
             raise ValueError("Windows CMD commands containing percent signs are not supported.")
         prepared = [
             translate_command(part) if isinstance(part, str) else part
@@ -94,7 +98,7 @@ def prepare_shell_command(command):
 def quote_command_argument(argument):
     """Quote one shell argument using the conventions of the active platform."""
     if is_windows():
-        if "%" in argument:
+        if _CMD_ENVIRONMENT_EXPANSION.search(argument):
             raise ValueError("Windows CMD arguments containing percent signs are not supported.")
         if any(
             character.isspace() or character in _CMD_METACHARACTERS

@@ -196,7 +196,7 @@ async def detect_sonde_async(
             + " -t %d 2>/dev/null" % dwell_time
         )
 
-    rx_test_command = autorx_platform.translate_command(rx_test_command)
+    rx_test_command = autorx_platform.prepare_shell_command(rx_test_command)
 
     _sdr_name = get_sdr_name(
         sdr_type,

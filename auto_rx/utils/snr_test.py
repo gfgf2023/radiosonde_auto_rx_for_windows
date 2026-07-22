@@ -21,6 +21,12 @@ import numpy as np
 import argparse
 import subprocess
 
+AUTO_RX_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if AUTO_RX_ROOT not in sys.path:
+	sys.path.insert(0, AUTO_RX_ROOT)
+
+from autorx import platform as autorx_platform
+
 # Demodulator calls. Replace as appropriate.
 RS92_DEMOD = "./rs92ecc --crc --ecc --vel"
 RS41_DEMOD = "./rs41ecc --crc --ecc --ptu"
@@ -67,7 +73,13 @@ def run_demod(filename, demod='RS92'):
 
 	# Run demod.
 	with open(os.devnull, 'w') as devnull:
-		output = subprocess.check_output(demod_command, shell=True, stderr=devnull)
+		output = autorx_platform.run_command(
+			demod_command,
+			shell=True,
+			stderr=devnull,
+			stdout=subprocess.PIPE,
+			check=True,
+		).stdout
 
 
 	if demod == 'RS92':

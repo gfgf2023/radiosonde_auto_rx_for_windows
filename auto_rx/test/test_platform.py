@@ -113,6 +113,12 @@ def test_prepare_shell_command_rejects_windows_percent_in_list_form(monkeypatch)
         platform.prepare_shell_command(["rtl_power", "-f", "%AUTORX_SCAN_FREQUENCY%"])
 
 
+def test_prepare_shell_command_allows_isolated_windows_percent(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    assert platform.prepare_shell_command("rtl_power -c 25%") == "rtl_power -c 25%"
+
+
 def test_prepare_shell_command_translates_percent_free_windows_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "win32")
 
