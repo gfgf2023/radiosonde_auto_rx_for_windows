@@ -14,6 +14,7 @@ import numpy as np
 
 from .utils import rtlsdr_test, reset_rtlsdr_by_serial, reset_all_rtlsdrs, timeout_cmd
 from .ka9q import *
+from . import platform as autorx_platform
 
 
 def test_sdr(
@@ -72,7 +73,7 @@ def test_sdr(
         # Try and configure a channel at check_freq Hz
         # tune --samprate 48000 --frequency 404m09 --mode iq --ssrc 404090000 --radio sonde.local
         _cmd = (
-            f"{timeout_cmd()} {timeout} " # Add a timeout, because connections to non-existing servers block for ages
+            f"{timeout_cmd(timeout)}" # Add a timeout, because connections to non-existing servers block for ages
             f"tune "
             f"--samprate 48000 --mode iq "
             f"--frequency {int(check_freq)} "
@@ -83,9 +84,14 @@ def test_sdr(
         logging.debug(f"KA9Q - Testing using command: {_cmd}")
 
         try:
-            _output = subprocess.check_output(
-                _cmd, shell=True, stderr=subprocess.STDOUT
+            _output = autorx_platform.run_command(
+                _cmd, timeout=timeout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+            ).stdout
+        except subprocess.TimeoutExpired:
+            logging.critical(
+                f"KA9Q ({sdr_hostname}) - tune call timed out. Is the server running?"
             )
+            return False
         except subprocess.CalledProcessError as e:
             # Something went wrong...
 
@@ -109,7 +115,7 @@ def test_sdr(
         
         # Now close the channel we just opened by setting the frequency to 0 Hz.
         _cmd = (
-            f"{timeout_cmd()} {timeout} " # Add a timeout, because connections to non-existing servers block for ages
+            f"{timeout_cmd(timeout)}" # Add a timeout, because connections to non-existing servers block for ages
             f"tune "
             f"--samprate 48000 --mode iq "
             f"--frequency 0 "
@@ -119,9 +125,14 @@ def test_sdr(
 
         logging.debug(f"KA9Q - Closing testing channel using command: {_cmd}")
         try:
-            _output = subprocess.check_output(
-                _cmd, shell=True, stderr=subprocess.STDOUT
+            _output = autorx_platform.run_command(
+                _cmd, timeout=timeout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+            ).stdout
+        except subprocess.TimeoutExpired:
+            logging.critical(
+                f"KA9Q ({sdr_hostname}) - tune call (closing channel) timed out."
             )
+            return False
         except subprocess.CalledProcessError as e:
             # Something went wrong...
             logging.critical(
@@ -143,7 +154,7 @@ def test_sdr(
             return False
 
         _cmd = (
-            f"{timeout_cmd()} {timeout} "  # Add a timeout, because connections to non-existing IPs seem to block.
+            f"{timeout_cmd(timeout)}"  # Add a timeout, because connections to non-existing IPs seem to block.
             f"{ss_iq_path} "
             f"-f {check_freq} "
             f"-s 48000 "
@@ -153,9 +164,14 @@ def test_sdr(
         logging.debug(f"SpyServer - Testing using command: {_cmd}")
 
         try:
-            _output = subprocess.check_output(
-                _cmd, shell=True, stderr=subprocess.STDOUT
+            _output = autorx_platform.run_command(
+                _cmd, timeout=timeout, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+            ).stdout
+        except subprocess.TimeoutExpired:
+            logging.critical(
+                f"SpyServer ({sdr_hostname}:{sdr_port}) - ss_iq call timed out."
             )
+            return False
         except subprocess.CalledProcessError as e:
             # Something went wrong...
             logging.critical(
@@ -639,7 +655,8 @@ def get_power_spectrum(
         if os.path.exists(_log_filename):
             os.remove(_log_filename)
 
-        _timeout_cmd = f"{timeout_cmd()} {integration_time+10} "
+        _timeout = integration_time + 10
+        _timeout_cmd = timeout_cmd(_timeout)
 
         _gain = ""
         if gain:
@@ -647,7 +664,7 @@ def get_power_spectrum(
                 _gain = f"-g {gain:.1f} "
 
         _rtl_power_cmd = (
-            f"{_timeout_cmd} {rtl_power_path} "
+            f"{_timeout_cmd}{rtl_power_path} "
             f"{'-T ' if bias else ''}"
             f"-p {int(ppm)} "
             f"-d {str(rtl_device_idx)} "
@@ -670,9 +687,16 @@ def get_power_spectrum(
         )
 
         try:
-            _output = subprocess.check_output(
-                _rtl_power_cmd, shell=True, stderr=subprocess.STDOUT
-            )
+            _output = autorx_platform.run_command(
+                _rtl_power_cmd,
+                timeout=_timeout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=True,
+            ).stdout
+        except subprocess.TimeoutExpired:
+            logging.critical(f"Scanner ({_sdr_name}) - rtl_power call timed out.")
+            return (None, None, None)
         except subprocess.CalledProcessError as e:
             # Something went wrong...
             logging.critical(
@@ -713,7 +737,8 @@ def get_power_spectrum(
         if os.path.exists(_log_filename):
             os.remove(_log_filename)
 
-        _timeout_cmd = f"{timeout_cmd()} {integration_time+10} "
+        _timeout = integration_time + 10
+        _timeout_cmd = timeout_cmd(_timeout)
 
         _frequency_centre = int(frequency_start + (frequency_stop-frequency_start)/2.0)
 
@@ -721,7 +746,7 @@ def get_power_spectrum(
         # spectrum data even if we have specified a frequency which is out of 
         # the range of a locked spyserver.
         _ss_power_cmd = (
-            f"{_timeout_cmd} {ss_power_path} "
+            f"{_timeout_cmd}{ss_power_path} "
             f"-f {_frequency_centre} "
             f"-i {integration_time} -1 -o "
             f"-r {sdr_hostname} -q {sdr_port} "
@@ -741,9 +766,16 @@ def get_power_spectrum(
         )
 
         try:
-            _output = subprocess.check_output(
-                _ss_power_cmd, shell=True, stderr=subprocess.STDOUT
-            )
+            _output = autorx_platform.run_command(
+                _ss_power_cmd,
+                timeout=_timeout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=True,
+            ).stdout
+        except subprocess.TimeoutExpired:
+            logging.critical(f"Scanner ({_sdr_name}) - ss_power call timed out.")
+            return (None, None, None)
         except subprocess.CalledProcessError as e:
             # Something went wrong...
             logging.critical(
@@ -775,13 +807,14 @@ def get_power_spectrum(
         if os.path.exists(_log_filename):
             os.remove(_log_filename)
 
-        _timeout_cmd = f"{timeout_cmd()} {integration_time+10} "
+        _timeout = integration_time + 10
+        _timeout_cmd = timeout_cmd(_timeout)
         _center_freq = (frequency_start + frequency_stop) / 2
         _bins = int((frequency_stop - frequency_start) / step) + 1 # 3001 for 2.4MHz @ 800Hz bins/steps
         _ssrc = f"{round(_center_freq / 1000)}03"
 
         _powers_cmd = (
-            f"{_timeout_cmd} {ka9q_powers_path} "
+            f"{_timeout_cmd}{ka9q_powers_path} "
             f"{sdr_hostname} "
             f"-f {_center_freq} "
             f"-w {step} "
@@ -805,9 +838,16 @@ def get_power_spectrum(
         )
 
         try:
-            _output = subprocess.check_output(
-                _powers_cmd, shell=True, stderr=subprocess.STDOUT
-            )
+            _output = autorx_platform.run_command(
+                _powers_cmd,
+                timeout=_timeout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=True,
+            ).stdout
+        except subprocess.TimeoutExpired:
+            logging.critical(f"Scanner ({_sdr_name}) - ka9q powers call timed out.")
+            return (None, None, None)
         except subprocess.CalledProcessError as e:
             # Something went wrong...
             logging.critical(

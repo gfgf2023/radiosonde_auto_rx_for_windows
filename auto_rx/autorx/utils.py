@@ -50,22 +50,26 @@ REQUIRED_RS_UTILS = [
 
 _timeout_cmd = None
 
-def timeout_cmd():
+def timeout_cmd(timeout=None):
+    """Return a Unix timeout command prefix, including its duration when supplied."""
     global _timeout_cmd
     if _timeout_cmd is None:
         if autorx_platform.is_windows():
             _timeout_cmd = ""
-            return _timeout_cmd
-        t=shutil.which("gtimeout")
-        if t:
-            _timeout_cmd = "gtimeout -k 30 "
         else:
-            if not shutil.which("timeout"):
-                logging.critical("timeout command-line tool not present in system. try installing gtimeout.")
-                sys.exit(1)
+            t=shutil.which("gtimeout")
+            if t:
+                _timeout_cmd = "gtimeout -k 30 "
             else:
-                _timeout_cmd = "timeout -k 30 "
-    return _timeout_cmd
+                if not shutil.which("timeout"):
+                    logging.critical("timeout command-line tool not present in system. try installing gtimeout.")
+                    sys.exit(1)
+                else:
+                    _timeout_cmd = "timeout -k 30 "
+
+    if timeout is None or autorx_platform.is_windows():
+        return _timeout_cmd
+    return f"{_timeout_cmd}{timeout} "
 
 def check_rs_utils(config):
     """ Check the required RS decoder binaries exist
@@ -949,8 +953,8 @@ def rtlsdr_test(device_idx="0", rtl_sdr_path="rtl_sdr", retries=5):
         logging.debug("RTLSDR - TCP Device, skipping RTLSDR test step.")
         return True
 
-    _rtl_cmd = "%s 5 %s -d %s -f 400000000 -n 200000 - > /dev/null" % (
-        timeout_cmd(),
+    _rtl_cmd = "%s%s -d %s -f 400000000 -n 200000 - > /dev/null" % (
+        timeout_cmd(5),
         rtl_sdr_path,
         str(device_idx),
     )
@@ -979,8 +983,12 @@ def rtlsdr_test(device_idx="0", rtl_sdr_path="rtl_sdr", retries=5):
         try:
             FNULL = open(os.devnull, "w")  # Inhibit stderr output
             logging.debug(f"Testing RTLSDR with command: {_rtl_cmd}")
-            _ret_code = subprocess.check_call(_rtl_cmd, shell=True, stderr=FNULL)
+            _ret_code = autorx_platform.run_command(
+                _rtl_cmd, timeout=5, stderr=FNULL, check=True
+            ).returncode
             FNULL.close()
+        except subprocess.TimeoutExpired:
+            logging.warning("rtl_sdr test call timed out.")
         except subprocess.CalledProcessError as e:
             # This exception means the subprocess has returned an error code of one.
             # This indicates either the RTLSDR doesn't exist, or some other error.

@@ -24,6 +24,7 @@ from .utils import (
     timeout_cmd
 )
 from .sdr_wrappers import test_sdr, reset_sdr, get_sdr_name, get_sdr_iq_cmd, get_sdr_fm_cmd, get_power_spectrum, shutdown_sdr
+from . import platform as autorx_platform
 
 # Import async scanning for concurrent peak detection
 try:
@@ -99,11 +100,11 @@ def run_rtl_power(
     if os.path.exists(filename):
         os.remove(filename)
 
+    _timeout = dwell + 10
     rtl_power_cmd = (
-        "%s %d %s %s-f %d:%d:%d -i %d -1 -c 25%% -p %d -d %s %s%s"
+        "%s%s %s-f %d:%d:%d -i %d -1 -c 25%% -p %d -d %s %s%s"
         % (
-            timeout_cmd(),
-            dwell + 10,
+            timeout_cmd(_timeout),
             rtl_power_path,
             bias_option,
             start,
@@ -123,9 +124,16 @@ def run_rtl_power(
     )
 
     try:
-        _output = subprocess.check_output(
-            rtl_power_cmd, shell=True, stderr=subprocess.STDOUT
-        )
+        _output = autorx_platform.run_command(
+            rtl_power_cmd,
+            timeout=_timeout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=True,
+        ).stdout
+    except subprocess.TimeoutExpired:
+        logging.critical("Scanner #%s - rtl_power call timed out." % str(device_idx))
+        return False
     except subprocess.CalledProcessError as e:
         # Something went wrong...
         logging.critical(
@@ -502,7 +510,8 @@ def detect_sonde(
 
     if _mode == "IQ":
         # IQ decoding
-        rx_test_command = f"{timeout_cmd()} {dwell_time * 2} "
+        _timeout = dwell_time * 2
+        rx_test_command = timeout_cmd(_timeout)
 
         rx_test_command += get_sdr_iq_cmd(
             sdr_type=sdr_type,
@@ -551,7 +560,8 @@ def detect_sonde(
 
         # Sample Source (rtl_fm)
 
-        rx_test_command = f"{timeout_cmd()} {dwell_time * 2} "
+        _timeout = dwell_time * 2
+        rx_test_command = timeout_cmd(_timeout)
 
         rx_test_command += get_sdr_fm_cmd(
             sdr_type=sdr_type,
@@ -618,10 +628,19 @@ def detect_sonde(
     try:
         FNULL = open(os.devnull, "w")
         _start = time.time()
-        ret_output = subprocess.check_output(rx_test_command, shell=True, stderr=FNULL)
+        ret_output = autorx_platform.run_command(
+            rx_test_command,
+            timeout=_timeout,
+            stdout=subprocess.PIPE,
+            stderr=FNULL,
+            check=True,
+        ).stdout
         FNULL.close()
         ret_output = ret_output.decode("utf8")
 
+    except subprocess.TimeoutExpired:
+        logging.error(f"Scanner ({_sdr_name}) - dft_detect timed out.")
+        raise IOError("Possible SDR lockup.")
     except subprocess.CalledProcessError as e:
         # dft_detect returns a code of 1 if no sonde is detected.
         # logging.debug("Scanner - dfm_detect return code: %s" % e.returncode)

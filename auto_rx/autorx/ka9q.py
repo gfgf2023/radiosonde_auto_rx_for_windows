@@ -11,6 +11,7 @@ import os.path
 import platform
 import subprocess
 from .utils import timeout_cmd
+from . import platform as autorx_platform
 
 
 def ka9q_setup_channel(
@@ -35,7 +36,7 @@ def ka9q_setup_channel(
         _high = int(int(sample_rate) / 2.4)
 
     _cmd = (
-        f"{timeout_cmd()} 5 " # Add a timeout, because connections to non-existing servers block for ages
+        f"{timeout_cmd(5)}" # Add a timeout, because connections to non-existing servers block for ages
         f"tune "
         f"--samprate {int(sample_rate)} "
         f"--mode iq "
@@ -48,9 +49,9 @@ def ka9q_setup_channel(
     logging.debug(f"KA9Q - Starting channel at {frequency} Hz, with command: {_cmd}")
 
     try:
-        _output = subprocess.check_output(
-            _cmd, shell=True, stderr=subprocess.STDOUT, timeout=10
-        )
+        _output = autorx_platform.run_command(
+            _cmd, timeout=5, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+        ).stdout
     except subprocess.TimeoutExpired:
         logging.critical(
             f"KA9Q ({sdr_hostname}) - tune call timed out while opening channel (Python timeout). "
@@ -92,7 +93,7 @@ def ka9q_close_channel(
         ssrc="01"
 
     _cmd = (
-        f"{timeout_cmd()} 5 " # Add a timeout, because connections to non-existing servers block for ages
+        f"{timeout_cmd(5)}" # Add a timeout, because connections to non-existing servers block for ages
         f"tune "
         f"--samprate 48000 "
         f"--mode iq "
@@ -104,9 +105,9 @@ def ka9q_close_channel(
     logging.debug(f"KA9Q - Closing channel at {frequency} Hz, with command: {_cmd}")
 
     try:
-        _output = subprocess.check_output(
-            _cmd, shell=True, stderr=subprocess.STDOUT, timeout=10
-        )
+        _output = autorx_platform.run_command(
+            _cmd, timeout=5, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+        ).stdout
     except subprocess.TimeoutExpired:
         logging.critical(
             f"KA9Q ({sdr_hostname}) - tune call timed out while closing channel (Python timeout). "
