@@ -69,6 +69,28 @@ def translate_command(command):
     return command
 
 
+def prepare_shell_command(command):
+    """Translate and validate a command that will be executed by a shell."""
+    if not is_windows():
+        return command
+
+    if isinstance(command, str):
+        if "%" in command:
+            raise ValueError("Windows CMD commands containing percent signs are not supported.")
+        return translate_command(command)
+
+    if isinstance(command, (list, tuple)):
+        if any(isinstance(part, str) and "%" in part for part in command):
+            raise ValueError("Windows CMD commands containing percent signs are not supported.")
+        prepared = [
+            translate_command(part) if isinstance(part, str) else part
+            for part in command
+        ]
+        return tuple(prepared) if isinstance(command, tuple) else prepared
+
+    return command
+
+
 def quote_command_argument(argument):
     """Quote one shell argument using the conventions of the active platform."""
     if is_windows():
@@ -88,9 +110,6 @@ def quote_command_argument(argument):
 
 def run_command(command, timeout=None, **kwargs):
     """Run a shell command with platform translation and tree-safe timeouts."""
-    if isinstance(command, str):
-        command = translate_command(command)
-
     input_data = kwargs.pop("input", None)
     capture_output = kwargs.pop("capture_output", False)
     check = kwargs.pop("check", False)
@@ -107,8 +126,10 @@ def run_command(command, timeout=None, **kwargs):
         kwargs["stderr"] = subprocess.PIPE
 
     kwargs.setdefault("shell", True)
-    if is_windows() and kwargs["shell"] and isinstance(command, str) and "%" in command:
-        raise ValueError("Windows CMD commands containing percent signs are not supported.")
+    if kwargs["shell"]:
+        command = prepare_shell_command(command)
+    elif isinstance(command, str):
+        command = translate_command(command)
     kwargs.update(popen_kwargs())
 
     with subprocess.Popen(command, **kwargs) as process:

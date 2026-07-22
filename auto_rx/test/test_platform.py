@@ -106,6 +106,23 @@ def test_run_command_rejects_windows_percent_expansion_before_shell(monkeypatch)
         platform.run_command("rtl_power -f %AUTORX_SCAN_FREQUENCY%", shell=True)
 
 
+def test_prepare_shell_command_rejects_windows_percent_in_list_form(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    with pytest.raises(ValueError, match="percent"):
+        platform.prepare_shell_command(["rtl_power", "-f", "%AUTORX_SCAN_FREQUENCY%"])
+
+
+def test_prepare_shell_command_translates_percent_free_windows_commands(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    assert platform.prepare_shell_command("./rs41mod --json") == r".\rs41mod.exe --json"
+    assert platform.prepare_shell_command(["./rs41mod", "--json"]) == [
+        r".\rs41mod.exe",
+        "--json",
+    ]
+
+
 def test_platform_helpers_preserve_linux_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "linux")
 

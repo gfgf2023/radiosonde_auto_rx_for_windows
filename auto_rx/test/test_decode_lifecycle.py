@@ -1,4 +1,7 @@
+import pytest
+
 from autorx import decode
+from autorx import platform
 
 
 class _Reader:
@@ -45,7 +48,7 @@ def test_decoder_lifecycle_uses_platform_process_helpers(monkeypatch):
 
     monkeypatch.setattr(decode.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(decode, "AsynchronousFileReader", _Reader)
-    monkeypatch.setattr(decode.platform, "translate_command", lambda command: "translated")
+    monkeypatch.setattr(decode.platform, "prepare_shell_command", lambda command: "translated")
     monkeypatch.setattr(decode.platform, "popen_kwargs", lambda: {"creationflags": 512})
     monkeypatch.setattr(decode.platform, "terminate_process_tree", terminated.append)
 
@@ -56,3 +59,26 @@ def test_decoder_lifecycle_uses_platform_process_helpers(monkeypatch):
     ]
     assert terminated == [decoder.decode_process]
     assert decoder.decoder_running is False
+
+
+def test_decoder_rejects_windows_percent_command_before_popen(monkeypatch):
+    decoder = decode.SondeDecoder.__new__(decode.SondeDecoder)
+    decoder.decoder_command = "decoder %AUTORX_SCAN_FREQUENCY%"
+    decoder.decoder_command_2 = None
+    decoder.decoder_running = True
+    decoder.timeout = 0
+    decoder.udp_mode = False
+    decoder.experimental_decoder = False
+    decoder.log_debug = lambda *args: None
+    decoder.log_info = lambda *args: None
+    decoder.log_error = lambda *args: None
+
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(
+        decode.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("decoder command must not reach Popen"),
+    )
+
+    with pytest.raises(ValueError, match="percent"):
+        decoder.decoder_thread()

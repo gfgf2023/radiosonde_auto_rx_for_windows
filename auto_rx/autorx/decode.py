@@ -1498,7 +1498,7 @@ class SondeDecoder(object):
 
             # Start the thread.
             self.decode_process = subprocess.Popen(
-                platform.translate_command(self.decoder_command),
+                platform.prepare_shell_command(self.decoder_command),
                 shell=True,
                 stdin=None,
                 stdout=subprocess.PIPE,
@@ -1513,7 +1513,7 @@ class SondeDecoder(object):
 
             # Startup the subprocesses
             self.demod_process = subprocess.Popen(
-                platform.translate_command(self.decoder_command),
+                platform.prepare_shell_command(self.decoder_command),
                 shell=True,
                 stdin=None,
                 stdout=subprocess.PIPE,
@@ -1521,7 +1521,7 @@ class SondeDecoder(object):
                 **platform.popen_kwargs(),
             )
             self.decode_process = subprocess.Popen(
-                platform.translate_command(self.decoder_command_2),
+                platform.prepare_shell_command(self.decoder_command_2),
                 shell=True,
                 stdin=self.demod_process.stdout,
                 stdout=subprocess.PIPE,
