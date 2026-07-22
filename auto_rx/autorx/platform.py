@@ -24,6 +24,7 @@ LOCAL_DECODER_EXECUTABLES = frozenset(
         "m20mod",
         "imet4iq",
         "mts01mod",
+        "rd94rd41drop",
         "iq_dec",
         "weathex301d",
     )

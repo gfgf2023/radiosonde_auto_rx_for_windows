@@ -39,6 +39,15 @@ def test_translate_command_resolves_windows_local_decoder_executable(monkeypatch
     )
 
 
+def test_translate_command_resolves_windows_rd94rd41drop_executable(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    assert (
+        platform.translate_command("./rd94rd41drop --json 2>/dev/null")
+        == r".\rd94rd41drop.exe --json 2>NUL"
+    )
+
+
 def test_translate_command_resolves_windows_local_decoder_pipeline(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "win32")
 
