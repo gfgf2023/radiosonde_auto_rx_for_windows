@@ -72,6 +72,8 @@ def translate_command(command):
 def quote_command_argument(argument):
     """Quote one shell argument using the conventions of the active platform."""
     if is_windows():
+        if "%" in argument:
+            raise ValueError("Windows CMD arguments containing percent signs are not supported.")
         if any(
             character.isspace() or character in _CMD_METACHARACTERS
             for character in argument
@@ -134,7 +136,7 @@ def popen_kwargs():
                 subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
             )
         }
-    return {"preexec_fn": os.setsid}
+    return {"start_new_session": True}
 
 
 def terminate_process_tree(process):

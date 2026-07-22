@@ -82,6 +82,17 @@ def test_quote_command_argument_runs_cmd_script_from_metacharacter_path(tmp_path
     assert result.stdout.strip() == b"SAFE"
 
 
+@pytest.mark.skipif(not platform.is_windows(), reason="requires cmd.exe")
+def test_quote_command_argument_rejects_literal_percent_path_before_cmd(tmp_path):
+    script_directory = tmp_path / "%PATH%"
+    script_directory.mkdir()
+    script = script_directory / "probe.cmd"
+    script.write_text("@echo SAFE\r\n", encoding="ascii")
+
+    with pytest.raises(ValueError, match="percent"):
+        platform.run_command(platform.quote_command_argument(str(script)))
+
+
 def test_platform_helpers_preserve_linux_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "linux")
 
@@ -98,6 +109,12 @@ def test_popen_kwargs_uses_a_windows_process_group(monkeypatch):
     assert platform.popen_kwargs() == {
         "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
     }
+
+
+def test_popen_kwargs_starts_a_new_posix_session(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "linux")
+
+    assert platform.popen_kwargs() == {"start_new_session": True}
 
 
 def test_run_command_returns_subprocess_result_with_timeout(monkeypatch):
