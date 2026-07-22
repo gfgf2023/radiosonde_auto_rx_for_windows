@@ -82,3 +82,6 @@ rs_module/rs92mod
 scan/reset_usb
 scan/rs_detect
 weathex/weathex301d
+
+# Local Git worktrees used for isolated development.
+/.worktrees/
