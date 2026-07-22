@@ -107,6 +107,8 @@ def run_command(command, timeout=None, **kwargs):
         kwargs["stderr"] = subprocess.PIPE
 
     kwargs.setdefault("shell", True)
+    if is_windows() and kwargs["shell"] and isinstance(command, str) and "%" in command:
+        raise ValueError("Windows CMD commands containing percent signs are not supported.")
     kwargs.update(popen_kwargs())
 
     with subprocess.Popen(command, **kwargs) as process:

@@ -93,6 +93,19 @@ def test_quote_command_argument_rejects_literal_percent_path_before_cmd(tmp_path
         platform.run_command(platform.quote_command_argument(str(script)))
 
 
+def test_run_command_rejects_windows_percent_expansion_before_shell(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setenv("AUTORX_SCAN_FREQUENCY", "401500000")
+    monkeypatch.setattr(
+        platform.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("command must not reach cmd.exe"),
+    )
+
+    with pytest.raises(ValueError, match="percent"):
+        platform.run_command("rtl_power -f %AUTORX_SCAN_FREQUENCY%", shell=True)
+
+
 def test_platform_helpers_preserve_linux_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "linux")
 
