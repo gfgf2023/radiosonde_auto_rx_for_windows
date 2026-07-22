@@ -142,7 +142,9 @@ async def detect_sonde_async(
                 f" tee {autorx_platform.quote_command_argument(detect_iq_path)} |"
             )
 
-        dft_detect_path = os.path.join(rs_path, "dft_detect")
+        dft_detect_path = os.path.join(
+            rs_path, autorx_platform.resolve_executable("dft_detect")
+        )
         rx_test_command += (
             autorx_platform.quote_command_argument(dft_detect_path)
             + " -t %d --iq --bw %d --dc - %d 16 2>/dev/null"
@@ -186,7 +188,9 @@ async def detect_sonde_async(
                 f" tee {autorx_platform.quote_command_argument(detect_audio_path)} |"
             )
 
-        dft_detect_path = os.path.join(rs_path, "dft_detect")
+        dft_detect_path = os.path.join(
+            rs_path, autorx_platform.resolve_executable("dft_detect")
+        )
         rx_test_command += (
             autorx_platform.quote_command_argument(dft_detect_path)
             + " -t %d 2>/dev/null" % dwell_time

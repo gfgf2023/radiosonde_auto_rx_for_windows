@@ -48,6 +48,19 @@ def test_translate_command_resolves_windows_local_decoder_pipeline(monkeypatch):
     )
 
 
+@pytest.mark.parametrize("metacharacter", ["&", "|", "<", ">", "(", ")", "^", '"'])
+def test_quote_command_argument_escapes_windows_cmd_metacharacters(
+    monkeypatch, metacharacter
+):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    argument = r"C:\tools" + metacharacter + r"qa\dft_detect"
+
+    assert platform.quote_command_argument(argument) == (
+        '"' + r"C:\tools^" + metacharacter + r"qa\dft_detect" + '"'
+    )
+
+
 def test_platform_helpers_preserve_linux_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "linux")
 
@@ -55,6 +68,7 @@ def test_platform_helpers_preserve_linux_commands(monkeypatch):
     assert platform.null_device() == "/dev/null"
     assert platform.resolve_executable("./rs41mod") == "./rs41mod"
     assert platform.translate_command("rs41mod 2>/dev/null") == "rs41mod 2>/dev/null"
+    assert platform.quote_command_argument("decoder path") == "'decoder path'"
 
 
 def test_popen_kwargs_uses_a_windows_process_group(monkeypatch):

@@ -32,6 +32,7 @@ LOCAL_DECODER_EXECUTABLES = frozenset(
 _LOCAL_DECODER_TOKEN = re.compile(
     r"(?<!\S)\./(?P<executable>[A-Za-z0-9_-]+)(?:\.exe)?(?=$|\s|[|;&])"
 )
+_CMD_METACHARACTERS = frozenset("&|<>()^\"")
 
 
 def is_windows():
@@ -71,7 +72,13 @@ def translate_command(command):
 def quote_command_argument(argument):
     """Quote one shell argument using the conventions of the active platform."""
     if is_windows():
-        return subprocess.list2cmdline([argument])
+        if any(character.isspace() or character in _CMD_METACHARACTERS for character in argument):
+            escaped = "".join(
+                "^" + character if character in _CMD_METACHARACTERS else character
+                for character in argument
+            )
+            return '"' + escaped + '"'
+        return argument
     return shlex.quote(argument)
 
 

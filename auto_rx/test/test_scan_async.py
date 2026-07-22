@@ -45,3 +45,44 @@ def test_async_ka9q_command_uses_windows_translation(monkeypatch):
     assert captured["kwargs"]["creationflags"] == getattr(
         __import__("subprocess"), "CREATE_NEW_PROCESS_GROUP", 0x00000200
     )
+
+
+def test_async_ka9q_command_preserves_windows_cmd_quoting(monkeypatch):
+    captured = {}
+
+    class Process:
+        returncode = 1
+
+        async def communicate(self):
+            return (b"", b"")
+
+        async def wait(self):
+            return self.returncode
+
+        def kill(self):
+            raise AssertionError("completed process should not be killed")
+
+    async def fake_create_subprocess_shell(command, **kwargs):
+        captured["command"] = command
+        return Process()
+
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(
+        sdr_wrappers, "get_sdr_iq_cmd", lambda **kwargs: "pcmrecord --raw sonde | "
+    )
+    monkeypatch.setattr(sdr_wrappers, "get_sdr_name", lambda *args, **kwargs: "KA9Q sonde")
+    monkeypatch.setattr(sdr_wrappers, "shutdown_sdr", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scan_async.asyncio, "create_subprocess_shell", fake_create_subprocess_shell
+    )
+
+    asyncio.run(
+        scan_async.detect_sonde_async(
+            frequency=401500000,
+            rs_path=r"C:\tools&qa",
+            sdr_type="KA9Q",
+            dwell_time=1,
+        )
+    )
+
+    assert r'"C:\tools^&qa\dft_detect.exe"' in captured["command"]
