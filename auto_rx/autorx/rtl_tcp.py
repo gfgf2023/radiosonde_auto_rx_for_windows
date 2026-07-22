@@ -134,18 +134,26 @@ class RtlTcpClient:
 
     def _send_command(self, command: bytes) -> None:
         connection = self._require_socket()
-        connection.sendall(command)
+        try:
+            connection.sendall(command)
+        except OSError:
+            self.close()
+            raise
 
     def _read_exact(self, size: int) -> bytes:
         connection = self._require_socket()
         chunks = bytearray()
-        while len(chunks) < size:
-            chunk = connection.recv(size - len(chunks))
-            if not chunk:
-                raise RtlTcpConnectionError(
-                    "RTL-TCP server closed the connection before completing a read"
-                )
-            chunks.extend(chunk)
+        try:
+            while len(chunks) < size:
+                chunk = connection.recv(size - len(chunks))
+                if not chunk:
+                    raise RtlTcpConnectionError(
+                        "RTL-TCP server closed the connection before completing a read"
+                    )
+                chunks.extend(chunk)
+        except OSError:
+            self.close()
+            raise
         return bytes(chunks)
 
     def _require_socket(self) -> socket.socket:

@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from autorx.rtl_tcp import RtlTcpClient, RtlTcpProtocolError
+from autorx.rtl_tcp import RtlTcpClient, RtlTcpConnectionError, RtlTcpProtocolError
 
 
 class FakeRtlTcpServer:
@@ -33,14 +33,28 @@ class FakeRtlTcpServer:
             pass
 
     def send_iq(self, data, chunks=(1,)):
-        while self._connection is None:
-            threading.Event().wait(0.001)
+        self._wait_for_connection()
         offset = 0
         for length in chunks:
             self._connection.sendall(data[offset : offset + length])
             offset += length
         if offset < len(data):
             self._connection.sendall(data[offset:])
+
+    def close_write(self):
+        self._wait_for_connection()
+        self._connection.shutdown(socket.SHUT_WR)
+
+    def reset_connection(self):
+        self._wait_for_connection()
+        self._connection.setsockopt(
+            socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("hh", 1, 0)
+        )
+        self._connection.close()
+
+    def _wait_for_connection(self):
+        while self._connection is None:
+            threading.Event().wait(0.001)
 
     def close(self):
         if self._connection is not None:
@@ -123,6 +137,68 @@ def test_read_iq_times_out_when_server_does_not_send_samples(rtl_tcp_server):
     with pytest.raises(socket.timeout):
         client.read_iq(1)
     client.close()
+
+
+def test_eof_disconnects_client_and_allows_reconnect():
+    first = FakeRtlTcpServer()
+    second = FakeRtlTcpServer(header=b"RTL0" + struct.pack("!II", 1, 2))
+    client = RtlTcpClient("127.0.0.1", first.port, timeout=1)
+    try:
+        client.connect()
+        first.close_write()
+
+        with pytest.raises(RtlTcpConnectionError):
+            client.read_iq(1)
+
+        assert client.connected is False
+        assert client.handshake is None
+        client.port = second.port
+        assert client.reconnect().tuner_type == 1
+    finally:
+        client.close()
+        first.close()
+        second.close()
+
+
+def test_read_timeout_disconnects_client_and_allows_reconnect():
+    first = FakeRtlTcpServer()
+    second = FakeRtlTcpServer(header=b"RTL0" + struct.pack("!II", 1, 2))
+    client = RtlTcpClient("127.0.0.1", first.port, timeout=0.01)
+    try:
+        client.connect()
+
+        with pytest.raises(socket.timeout):
+            client.read_iq(1)
+
+        assert client.connected is False
+        assert client.handshake is None
+        client.port = second.port
+        assert client.reconnect().tuner_type == 1
+    finally:
+        client.close()
+        first.close()
+        second.close()
+
+
+def test_send_failure_disconnects_client_and_allows_reconnect():
+    first = FakeRtlTcpServer()
+    second = FakeRtlTcpServer(header=b"RTL0" + struct.pack("!II", 1, 2))
+    client = RtlTcpClient("127.0.0.1", first.port, timeout=1)
+    try:
+        client.connect()
+        first.reset_connection()
+
+        with pytest.raises(OSError):
+            client.set_frequency(401_500_000)
+
+        assert client.connected is False
+        assert client.handshake is None
+        client.port = second.port
+        assert client.reconnect().tuner_type == 1
+    finally:
+        client.close()
+        first.close()
+        second.close()
 
 
 def test_reconnect_closes_previous_socket_and_reads_new_handshake():
