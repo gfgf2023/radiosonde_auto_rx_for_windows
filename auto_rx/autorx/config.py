@@ -866,6 +866,12 @@ def read_auto_rx_config(filename, no_sdr_test=False):
                     continue
 
         elif auto_rx_config["sdr_type"] == "RTL_TCP":
+            if auto_rx_config["sdr_quantity"] != 1:
+                logging.critical(
+                    "Config - RTL-TCP controls one global tuner; sdr_quantity must be 1."
+                )
+                return None
+
             _rtl_tcp_settings = []
             for _n in range(1, auto_rx_config["sdr_quantity"] + 1):
                 _section = "sdr_%d" % _n

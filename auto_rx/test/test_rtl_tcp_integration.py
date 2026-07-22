@@ -120,7 +120,7 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec():
     assert "rtl_fm" not in command
 
 
-def test_rtl_tcp_config_validates_endpoint_and_allocates_virtual_receivers(
+def test_rtl_tcp_config_rejects_multiple_receivers_for_one_global_tuner(
     tmp_path, monkeypatch
 ):
     source = Path(config.__file__).resolve().parents[1] / "station.cfg.example"
@@ -142,16 +142,8 @@ def test_rtl_tcp_config_validates_endpoint_and_allocates_virtual_receivers(
 
     result = config.read_auto_rx_config(str(cfg))
 
-    assert calls == [
-        {
-            "sdr_type": "RTL_TCP",
-            "sdr_hostname": "rtl.example",
-            "sdr_port": 1234,
-            "timeout": 60,
-        }
-    ]
-    assert set(result["sdr_settings"]) == {"RTL_TCP-01", "RTL_TCP-02"}
-    assert result["sdr_settings"]["RTL_TCP-01"]["bias"] is False
+    assert result is None
+    assert calls == []
 
 
 def test_rtl_tcp_config_rejects_bias_tee(tmp_path, monkeypatch):
