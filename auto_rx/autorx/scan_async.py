@@ -14,10 +14,10 @@
 import asyncio
 import logging
 import os
-import shlex
 import time
 from typing import Optional, Tuple
 import threading
+from . import platform as autorx_platform
 
 # Lazy imports to avoid dependency issues at module load time
 # These will be imported when functions are actually called
@@ -138,11 +138,13 @@ async def detect_sonde_async(
                 autorx.logging_path,
                 f"detect_IQ_{frequency}_{_iq_bw}_{str(rtl_device_idx)}.raw",
             )
-            rx_test_command += f" tee {shlex.quote(detect_iq_path)} |"
+            rx_test_command += (
+                f" tee {autorx_platform.quote_command_argument(detect_iq_path)} |"
+            )
 
         dft_detect_path = os.path.join(rs_path, "dft_detect")
         rx_test_command += (
-            shlex.quote(dft_detect_path)
+            autorx_platform.quote_command_argument(dft_detect_path)
             + " -t %d --iq --bw %d --dc - %d 16 2>/dev/null"
             % (dwell_time, _if_bw, _iq_bw)
         )
@@ -180,12 +182,17 @@ async def detect_sonde_async(
                 autorx.logging_path,
                 f"detect_audio_{frequency}_{str(rtl_device_idx)}.wav",
             )
-            rx_test_command += f" tee {shlex.quote(detect_audio_path)} |"
+            rx_test_command += (
+                f" tee {autorx_platform.quote_command_argument(detect_audio_path)} |"
+            )
 
         dft_detect_path = os.path.join(rs_path, "dft_detect")
         rx_test_command += (
-            shlex.quote(dft_detect_path) + " -t %d 2>/dev/null" % dwell_time
+            autorx_platform.quote_command_argument(dft_detect_path)
+            + " -t %d 2>/dev/null" % dwell_time
         )
+
+    rx_test_command = autorx_platform.translate_command(rx_test_command)
 
     _sdr_name = get_sdr_name(
         sdr_type,
@@ -210,6 +217,7 @@ async def detect_sonde_async(
             rx_test_command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **autorx_platform.popen_kwargs(),
         )
 
         # Wait for completion with timeout
@@ -220,7 +228,7 @@ async def detect_sonde_async(
             ret_output = stdout.decode("utf8")
             stderr_output = stderr.decode("utf8") if stderr else ""
         except asyncio.TimeoutError:
-            process.kill()
+            autorx_platform.terminate_process_tree(process)
             try:
                 await asyncio.wait_for(process.wait(), timeout=PROCESS_WAIT_TIMEOUT)
             except asyncio.TimeoutError:
@@ -262,7 +270,7 @@ async def detect_sonde_async(
             try:
                 if process.returncode is None:
                     # Process still running - kill it
-                    process.kill()
+                    autorx_platform.terminate_process_tree(process)
                     try:
                         await asyncio.wait_for(process.wait(), timeout=PROCESS_WAIT_TIMEOUT)
                     except asyncio.TimeoutError:

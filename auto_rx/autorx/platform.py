@@ -2,6 +2,7 @@
 
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -67,12 +68,53 @@ def translate_command(command):
     return command
 
 
+def quote_command_argument(argument):
+    """Quote one shell argument using the conventions of the active platform."""
+    if is_windows():
+        return subprocess.list2cmdline([argument])
+    return shlex.quote(argument)
+
+
 def run_command(command, timeout=None, **kwargs):
-    """Run a shell command with platform translation and a Python timeout."""
+    """Run a shell command with platform translation and tree-safe timeouts."""
     if isinstance(command, str):
         command = translate_command(command)
+
+    input_data = kwargs.pop("input", None)
+    capture_output = kwargs.pop("capture_output", False)
+    check = kwargs.pop("check", False)
+
+    if input_data is not None:
+        if kwargs.get("stdin") is not None:
+            raise ValueError("stdin and input arguments may not both be used.")
+        kwargs["stdin"] = subprocess.PIPE
+
+    if capture_output:
+        if kwargs.get("stdout") is not None or kwargs.get("stderr") is not None:
+            raise ValueError("stdout and stderr arguments may not be used with capture_output.")
+        kwargs["stdout"] = subprocess.PIPE
+        kwargs["stderr"] = subprocess.PIPE
+
     kwargs.setdefault("shell", True)
-    return subprocess.run(command, timeout=timeout, **kwargs)
+    kwargs.update(popen_kwargs())
+
+    with subprocess.Popen(command, **kwargs) as process:
+        try:
+            stdout, stderr = process.communicate(input_data, timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            terminate_process_tree(process)
+            stdout, stderr = process.communicate()
+            exc.output = stdout
+            exc.stderr = stderr
+            raise
+
+        returncode = process.poll()
+        if check and returncode:
+            raise subprocess.CalledProcessError(
+                returncode, command, output=stdout, stderr=stderr
+            )
+
+    return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
 
 def popen_kwargs():

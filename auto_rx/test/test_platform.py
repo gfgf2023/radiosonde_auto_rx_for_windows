@@ -66,27 +66,97 @@ def test_popen_kwargs_uses_a_windows_process_group(monkeypatch):
 
 
 def test_run_command_returns_subprocess_result_with_timeout(monkeypatch):
-    expected = subprocess.CompletedProcess("decoder 2>NUL", 0, stdout=b"ok")
+    class Process:
+        args = "decoder 2>NUL"
+        returncode = 0
 
-    def fake_run(*args, **kwargs):
-        assert args == ("decoder 2>NUL",)
-        assert kwargs == {"shell": True, "timeout": 5, "capture_output": True}
-        return expected
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def communicate(self, input=None, timeout=None):
+            assert input is None
+            assert timeout == 5
+            return (b"ok", b"")
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+        def wait(self):
+            return self.returncode
+
+    created = {}
+
+    def fake_popen(*args, **kwargs):
+        created["args"] = args
+        created["kwargs"] = kwargs
+        return Process()
 
     monkeypatch.setattr(platform.sys, "platform", "win32")
-    monkeypatch.setattr(platform.subprocess, "run", fake_run)
+    monkeypatch.setattr(platform.subprocess, "Popen", fake_popen)
 
-    assert platform.run_command("decoder 2>/dev/null", timeout=5, capture_output=True) is expected
+    result = platform.run_command("decoder 2>/dev/null", timeout=5, capture_output=True)
+
+    assert result.args == "decoder 2>NUL"
+    assert result.stdout == b"ok"
+    assert created == {
+        "args": ("decoder 2>NUL",),
+        "kwargs": {
+            "shell": True,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "creationflags": getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+            ),
+        },
+    }
 
 
-def test_run_command_propagates_timeout(monkeypatch):
-    def fake_run(*args, **kwargs):
-        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+def test_run_command_terminates_the_process_tree_on_timeout(monkeypatch):
+    class Process:
+        args = "decoder"
+        returncode = -9
 
-    monkeypatch.setattr(platform.subprocess, "run", fake_run)
+        def __init__(self):
+            self.timeouts = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def communicate(self, input=None, timeout=None):
+            self.timeouts.append(timeout)
+            if len(self.timeouts) == 1:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            return (b"", b"")
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+        def wait(self):
+            return self.returncode
+
+    process = Process()
+    terminated = []
+
+    monkeypatch.setattr(platform.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(platform, "terminate_process_tree", terminated.append)
 
     with pytest.raises(subprocess.TimeoutExpired):
         platform.run_command("decoder", timeout=1)
+
+    assert terminated == [process]
+    assert process.timeouts == [1, None]
 
 
 def test_terminate_process_tree_uses_taskkill_on_windows(monkeypatch):
