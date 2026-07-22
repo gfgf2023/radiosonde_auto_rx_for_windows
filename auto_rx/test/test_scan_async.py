@@ -152,3 +152,38 @@ def test_async_debug_capture_suppresses_windows_tee(monkeypatch):
     )
 
     assert "tee " not in captured["command"]
+
+
+def test_async_spyserver_quotes_windows_ss_iq_path(monkeypatch):
+    captured = {}
+
+    class Process:
+        returncode = 1
+
+        async def communicate(self):
+            return (b"", b"")
+
+        async def wait(self):
+            return self.returncode
+
+    async def fake_create_subprocess_shell(command, **kwargs):
+        captured["command"] = command
+        return Process()
+
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(sdr_wrappers, "get_sdr_name", lambda *args, **kwargs: "SpyServer")
+    monkeypatch.setattr(sdr_wrappers, "shutdown_sdr", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scan_async.asyncio, "create_subprocess_shell", fake_create_subprocess_shell
+    )
+
+    asyncio.run(
+        scan_async.detect_sonde_async(
+            frequency=401500000,
+            rs_path="./",
+            sdr_type="SpyServer",
+            ss_iq_path=r"C:\Program Files\spyserver\ss_iq.exe",
+        )
+    )
+
+    assert captured["command"].startswith(r'"C:\Program Files\spyserver\ss_iq.exe" ')

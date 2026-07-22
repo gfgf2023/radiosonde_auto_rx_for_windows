@@ -155,7 +155,7 @@ def test_sdr(
 
         _cmd = (
             f"{timeout_cmd(timeout)}"  # Add a timeout, because connections to non-existing IPs seem to block.
-            f"{ss_iq_path} "
+            f"{autorx_platform.quote_command_argument(ss_iq_path)} "
             f"-f {check_freq} "
             f"-s 48000 "
             f"-r {sdr_hostname} -q {sdr_port} -n 48000 - > /dev/null"
@@ -348,7 +348,7 @@ def get_sdr_iq_cmd(
                 _agc = f"-E agc "
 
         _cmd = (
-            f"{rtl_fm_path} -M raw "
+            f"{autorx_platform.quote_command_argument(rtl_fm_path)} -M raw "
             f"{'' if fast_filter else '-F9 '}"
             f"{'-T ' if bias else ''}"
             f"-p {int(ppm)} "
@@ -367,7 +367,7 @@ def get_sdr_iq_cmd(
 
     if sdr_type == "SpyServer":
         _cmd = (
-            f"{ss_iq_path} "
+            f"{autorx_platform.quote_command_argument(ss_iq_path)} "
             f"-f {frequency} "
             f"-s {int(sample_rate)} "
             f"-r {sdr_hostname} -q {sdr_port} - 2>/dev/null|"
@@ -441,7 +441,7 @@ def get_sdr_fm_cmd(
                 _gain = f"-g {gain:.1f} "
 
         _cmd = (
-            f"{rtl_fm_path} -M fm -F9 "
+            f"{autorx_platform.quote_command_argument(rtl_fm_path)} -M fm -F9 "
             f"{'-T ' if bias else ''}"
             f"-p {int(ppm)} "
             f"-d {str(rtl_device_idx)} "
@@ -664,14 +664,14 @@ def get_power_spectrum(
                 _gain = f"-g {gain:.1f} "
 
         _rtl_power_cmd = (
-            f"{_timeout_cmd}{rtl_power_path} "
+            f"{_timeout_cmd}{autorx_platform.quote_command_argument(rtl_power_path)} "
             f"{'-T ' if bias else ''}"
             f"-p {int(ppm)} "
             f"-d {str(rtl_device_idx)} "
             f"{_gain}"
             f"-f {frequency_start}:{frequency_stop}:{step} "
             f"-i {integration_time} -1 -c 25% "
-            f"{_log_filename}"
+            f"{autorx_platform.quote_command_argument(_log_filename)}"
         )
 
         _sdr_name = get_sdr_name(
@@ -746,11 +746,11 @@ def get_power_spectrum(
         # spectrum data even if we have specified a frequency which is out of 
         # the range of a locked spyserver.
         _ss_power_cmd = (
-            f"{_timeout_cmd}{ss_power_path} "
+            f"{_timeout_cmd}{autorx_platform.quote_command_argument(ss_power_path)} "
             f"-f {_frequency_centre} "
             f"-i {integration_time} -1 -o "
             f"-r {sdr_hostname} -q {sdr_port} "
-            f"{_log_filename}"
+            f"{autorx_platform.quote_command_argument(_log_filename)}"
         )
 
         _sdr_name = get_sdr_name(
@@ -814,7 +814,7 @@ def get_power_spectrum(
         _ssrc = f"{round(_center_freq / 1000)}03"
 
         _powers_cmd = (
-            f"{_timeout_cmd}{ka9q_powers_path} "
+            f"{_timeout_cmd}{autorx_platform.quote_command_argument(ka9q_powers_path)} "
             f"{sdr_hostname} "
             f"-f {_center_freq} "
             f"-w {step} "
@@ -822,7 +822,7 @@ def get_power_spectrum(
             f"-i {integration_time} "
             f"-s {_ssrc} "
             f"-c 2 " # burn the first scan result due to no dwelling
-            f"> {_log_filename}"
+            f"> {autorx_platform.quote_command_argument(_log_filename)}"
         )
 
         _sdr_name = get_sdr_name(

@@ -105,7 +105,7 @@ def run_rtl_power(
         "%s%s %s-f %d:%d:%d -i %d -1 -c 25%% -p %d -d %s %s%s"
         % (
             timeout_cmd(_timeout),
-            rtl_power_path,
+            autorx_platform.quote_command_argument(rtl_power_path),
             bias_option,
             start,
             stop,
@@ -114,7 +114,7 @@ def run_rtl_power(
             int(ppm),  # Should this be an int?
             str(device_idx),
             gain_param,
-            filename,
+            autorx_platform.quote_command_argument(filename),
         )
     )
 
@@ -545,10 +545,13 @@ def detect_sonde(
         # Saving of Debug audio, if enabled,
         if save_detection_audio:
             detect_iq_path = os.path.join(autorx.logging_path, f"detect_IQ_{frequency}_{_iq_bw}_{str(rtl_device_idx)}.raw")
-            rx_test_command += f" tee {detect_iq_path} |"
+            rx_test_command += f" tee {autorx_platform.quote_command_argument(detect_iq_path)} |"
 
-        rx_test_command += os.path.join(
-            rs_path, "dft_detect"
+        dft_detect_path = os.path.join(
+            rs_path, autorx_platform.resolve_executable("dft_detect")
+        )
+        rx_test_command += autorx_platform.quote_command_argument(
+            dft_detect_path
         ) + " -t %d --iq --bw %d --dc - %d 16 2>/dev/null" % (
             dwell_time,
             _if_bw,
@@ -602,12 +605,16 @@ def detect_sonde(
         # Saving of Debug audio, if enabled,
         if save_detection_audio:
             detect_audio_path = os.path.join(autorx.logging_path, f"detect_audio_{frequency}_{str(rtl_device_idx)}.wav")
-            rx_test_command += f" tee {detect_audio_path} |"
+            rx_test_command += f" tee {autorx_platform.quote_command_argument(detect_audio_path)} |"
 
         # Sample decoding / detection
         # Note that we detect for dwell_time seconds, and timeout after dwell_time*2, to catch if no samples are being passed through.
         rx_test_command += (
-            os.path.join(rs_path, "dft_detect") + " -t %d 2>/dev/null" % dwell_time
+            autorx_platform.quote_command_argument(
+                os.path.join(
+                    rs_path, autorx_platform.resolve_executable("dft_detect")
+                )
+            ) + " -t %d 2>/dev/null" % dwell_time
         )
 
     _sdr_name = get_sdr_name(

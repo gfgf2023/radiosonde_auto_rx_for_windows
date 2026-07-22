@@ -31,6 +31,50 @@ def test_rtl_power_uses_a_python_timeout_without_a_windows_numeric_prefix(
     assert calls[0][1]["timeout"] == 14
 
 
+def test_rtl_power_quotes_windows_tool_and_log_paths(monkeypatch):
+    calls = []
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(
+        scan.autorx_platform,
+        "run_command",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or subprocess.CompletedProcess(args[0], 0),
+    )
+
+    assert scan.run_rtl_power(
+        400000000,
+        401000000,
+        1000,
+        filename=r"C:\Program Files\auto_rx\power.csv",
+        rtl_power_path=r"C:\Program Files\rtl\rtl_power.exe",
+    )
+
+    assert r'"C:\Program Files\rtl\rtl_power.exe"' in calls[0][0][0]
+    assert r'"C:\Program Files\auto_rx\power.csv"' in calls[0][0][0]
+
+
+def test_sync_detection_quotes_windows_decoder_path(monkeypatch):
+    calls = []
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(scan, "get_sdr_iq_cmd", lambda **kwargs: "source | ")
+    monkeypatch.setattr(scan, "get_sdr_name", lambda *args, **kwargs: "SpyServer")
+    monkeypatch.setattr(
+        scan.autorx_platform,
+        "run_command",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or subprocess.CompletedProcess(args[0], 1, stdout=b""),
+    )
+
+    assert scan.detect_sonde(
+        401500000,
+        rs_path=r"C:\Program Files\auto_rx",
+        sdr_type="SpyServer",
+        ss_iq_path="ignored",
+    ) == (None, 0.0)
+
+    assert r'"C:\Program Files\auto_rx\dft_detect.exe"' in calls[0][0][0]
+
+
 def test_ka9q_setup_uses_a_python_timeout_without_a_windows_numeric_prefix(
     monkeypatch,
 ):
