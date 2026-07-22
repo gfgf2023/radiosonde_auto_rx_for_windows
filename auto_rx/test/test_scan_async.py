@@ -85,4 +85,4 @@ def test_async_ka9q_command_preserves_windows_cmd_quoting(monkeypatch):
         )
     )
 
-    assert r'"C:\tools^&qa\dft_detect.exe"' in captured["command"]
+    assert r'"C:\tools&qa\dft_detect.exe"' in captured["command"]

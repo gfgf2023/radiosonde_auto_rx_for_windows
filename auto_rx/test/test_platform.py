@@ -48,17 +48,38 @@ def test_translate_command_resolves_windows_local_decoder_pipeline(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("metacharacter", ["&", "|", "<", ">", "(", ")", "^", '"'])
-def test_quote_command_argument_escapes_windows_cmd_metacharacters(
+@pytest.mark.parametrize("metacharacter", ["&", "|", "<", ">", "(", ")", "^"])
+def test_quote_command_argument_quotes_windows_cmd_metacharacters(
     monkeypatch, metacharacter
 ):
     monkeypatch.setattr(platform.sys, "platform", "win32")
 
     argument = r"C:\tools" + metacharacter + r"qa\dft_detect"
 
-    assert platform.quote_command_argument(argument) == (
-        '"' + r"C:\tools^" + metacharacter + r"qa\dft_detect" + '"'
+    assert platform.quote_command_argument(argument) == '"' + argument + '"'
+
+
+def test_quote_command_argument_uses_windows_quote_escaping(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    assert (
+        platform.quote_command_argument('C:\\tools"qa\\dft_detect')
+        == r'"C:\tools\"qa\dft_detect"'
     )
+
+
+@pytest.mark.skipif(not platform.is_windows(), reason="requires cmd.exe")
+def test_quote_command_argument_runs_cmd_script_from_metacharacter_path(tmp_path):
+    script_directory = tmp_path / "tools&qa"
+    script_directory.mkdir()
+    script = script_directory / "probe.cmd"
+    script.write_text("@echo SAFE\r\n", encoding="ascii")
+
+    result = platform.run_command(
+        platform.quote_command_argument(str(script)), capture_output=True, check=True
+    )
+
+    assert result.stdout.strip() == b"SAFE"
 
 
 def test_platform_helpers_preserve_linux_commands(monkeypatch):
@@ -182,7 +203,12 @@ def test_terminate_process_tree_uses_taskkill_on_windows(monkeypatch):
 
     calls = []
     monkeypatch.setattr(platform.sys, "platform", "win32")
-    monkeypatch.setattr(platform.subprocess, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        platform.subprocess,
+        "run",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or subprocess.CompletedProcess(args[0], 0),
+    )
 
     platform.terminate_process_tree(Process())
 
@@ -193,6 +219,34 @@ def test_terminate_process_tree_uses_taskkill_on_windows(monkeypatch):
             "stderr": subprocess.DEVNULL,
         })
     ]
+
+
+def test_terminate_process_tree_falls_back_when_taskkill_fails(monkeypatch):
+    class Process:
+        pid = 123
+
+        def __init__(self):
+            self.killed = False
+            self.waited = False
+
+        def kill(self):
+            self.killed = True
+
+        def wait(self):
+            self.waited = True
+
+    process = Process()
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(
+        platform.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1),
+    )
+
+    platform.terminate_process_tree(process)
+
+    assert process.killed is True
+    assert process.waited is True
 
 
 def test_startup_helper_resolves_windows_decoder_executables_without_timeout_command(

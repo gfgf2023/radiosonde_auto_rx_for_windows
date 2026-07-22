@@ -72,11 +72,13 @@ def translate_command(command):
 def quote_command_argument(argument):
     """Quote one shell argument using the conventions of the active platform."""
     if is_windows():
-        if any(character.isspace() or character in _CMD_METACHARACTERS for character in argument):
-            escaped = "".join(
-                "^" + character if character in _CMD_METACHARACTERS else character
-                for character in argument
-            )
+        if any(
+            character.isspace() or character in _CMD_METACHARACTERS
+            for character in argument
+        ):
+            escaped = subprocess.list2cmdline([argument])
+            if escaped.startswith('"') and escaped.endswith('"'):
+                return escaped
             return '"' + escaped + '"'
         return argument
     return shlex.quote(argument)
@@ -142,15 +144,26 @@ def terminate_process_tree(process):
 
     if is_windows():
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
                 check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            return
+            if result.returncode == 0:
+                return
         except (OSError, subprocess.SubprocessError):
             pass
+
+        try:
+            process.kill()
+        except OSError:
+            pass
+        try:
+            process.wait()
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return
 
     else:
         try:
