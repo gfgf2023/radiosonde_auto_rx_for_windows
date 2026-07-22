@@ -704,6 +704,9 @@ def read_auto_rx_config(filename, no_sdr_test=False):
         else:
             auto_rx_config["sdr_type"] = config.get("sdr", "sdr_type")
 
+        if auto_rx_config["sdr_type"] == "RTL_TCP":
+            auto_rx_config["sdr_port"] = 1234
+
         try:
             auto_rx_config["sdr_hostname"] = config.get("sdr", "sdr_hostname")
             auto_rx_config["sdr_port"] = config.getint("sdr", "sdr_port")
@@ -861,6 +864,48 @@ def read_auto_rx_config(filename, no_sdr_test=False):
                         "Config - Error parsing RTLSDR %d config - %s" % (_n, str(e))
                     )
                     continue
+
+        elif auto_rx_config["sdr_type"] == "RTL_TCP":
+            _rtl_tcp_settings = []
+            for _n in range(1, auto_rx_config["sdr_quantity"] + 1):
+                _section = "sdr_%d" % _n
+                try:
+                    _ppm = round(config.getfloat(_section, "ppm"))
+                    _gain = config.getfloat(_section, "gain")
+                    _bias = config.getboolean(_section, "bias")
+                    if _bias:
+                        logging.critical(
+                            "Config - Bias-T is not supported by the base RTL-TCP protocol."
+                        )
+                        return None
+                    _rtl_tcp_settings.append((_ppm, _gain))
+                except Exception as e:
+                    logging.error(
+                        "Config - Error parsing RTL-TCP %d config - %s" % (_n, str(e))
+                    )
+                    return None
+
+            _sdr_ok = test_sdr(
+                sdr_type="RTL_TCP",
+                sdr_hostname=auto_rx_config["sdr_hostname"],
+                sdr_port=auto_rx_config["sdr_port"],
+                timeout=60,
+            )
+            if not _sdr_ok:
+                logging.critical(
+                    f"Config - Could not contact RTL-TCP server {auto_rx_config['sdr_hostname']}:{auto_rx_config['sdr_port']}. Exiting."
+                )
+                return None
+
+            for _n, (_ppm, _gain) in enumerate(_rtl_tcp_settings, start=1):
+                _sdr_name = f"RTL_TCP-{_n:02d}"
+                auto_rx_config["sdr_settings"][_sdr_name] = {
+                    "ppm": _ppm,
+                    "gain": _gain,
+                    "bias": False,
+                    "in_use": False,
+                    "task": None,
+                }
 
         elif auto_rx_config["sdr_type"] == "SpyServer":
             # Test access to the SpyServer

@@ -22,6 +22,7 @@
 # Network SDR Server options:
 # SpyServer - Use an Airspy SpyServer
 # KA9Q - Use a KA9Q-Radio Server 
+# RTL_TCP - Use a standard rtl_tcp server
 #
 sdr_type = RTLSDR
 
@@ -33,7 +34,7 @@ sdr_type = RTLSDR
 # that will be used, eith each RTLSDR allocated a scan or decode task.
 # If more than one RTLSDR is in use, multiple [sdr_X] sections must be populated below
 #
-# If SDR type is either KA9Q or SpyServer, this defines the maximum number of parallel
+# If SDR type is either KA9Q, SpyServer, or RTL_TCP, this defines the maximum number of parallel
 # decoding/scan tasks. On a RPi 4, ~5 tasks are possible.
 #
 sdr_quantity = 1
@@ -42,9 +43,10 @@ sdr_quantity = 1
 #
 # Network SDR Connection Details
 #
-# If using a spyserver, the hostname and port need to be defined below.
+# If using a SpyServer or RTL_TCP server, the hostname and port need to be defined below.
 # Is using KA9Q-Radio, the hostname of the 'radio' server (e.g. sonde.local) needs to be
 # defined, and the port number is unused.
+# Standard RTL_TCP servers use port 1234 by default; SpyServer uses port 5555.
 #
 sdr_hostname = localhost
 sdr_port = 5555
@@ -53,7 +55,8 @@ sdr_port = 5555
 # Individual RTLSDR Settings
 #
 # Provide details of your RTLSDRs here, e.g. device numbers, gain settings, and PPM offsets.
-# If using a Network SDR, do not modify any of these settings.
+# RTL_TCP uses the ppm and gain values from these sections. Bias-T must remain False,
+# because it is not part of the base RTL-TCP protocol. Other network SDRs ignore them.
 #
 [sdr_1]
 # Device Index / Serial

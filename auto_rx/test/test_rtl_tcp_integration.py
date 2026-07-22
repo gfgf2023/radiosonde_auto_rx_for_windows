@@ -1,0 +1,167 @@
+import io
+from pathlib import Path
+import subprocess
+import sys
+
+import pytest
+
+from autorx import config
+from autorx import sdr_wrappers
+from autorx.rtl_tcp_rx import configure_client, stream_iq
+
+
+class FakeBridgeClient:
+    def __init__(self, chunk):
+        self.chunk = chunk
+        self.calls = []
+
+    def connect(self):
+        self.calls.append(("connect",))
+
+    def set_frequency(self, value):
+        self.calls.append(("frequency", value))
+
+    def set_sample_rate(self, value):
+        self.calls.append(("sample_rate", value))
+
+    def set_ppm(self, value):
+        self.calls.append(("ppm", value))
+
+    def set_gain_mode(self, value):
+        self.calls.append(("gain_mode", value))
+
+    def set_gain(self, value):
+        self.calls.append(("gain", value))
+
+    def read_iq(self, samples):
+        self.calls.append(("read_iq", samples))
+        if self.chunk is None:
+            raise ConnectionError("server closed")
+        chunk, self.chunk = self.chunk, None
+        return chunk
+
+
+def test_bridge_configures_manual_gain_and_forwards_signed_iq():
+    client = FakeBridgeClient(b"\x00\x80\x00\x00")
+    output = io.BytesIO()
+
+    configure_client(
+        client,
+        frequency=401_500_000,
+        sample_rate=96_000,
+        ppm=-12,
+        gain=49.6,
+    )
+    with pytest.raises(ConnectionError, match="server closed"):
+        stream_iq(client, output, samples_per_chunk=1)
+
+    assert client.calls == [
+        ("connect",),
+        ("frequency", 401_500_000),
+        ("sample_rate", 96_000),
+        ("ppm", -12),
+        ("gain_mode", True),
+        ("gain", 496),
+        ("read_iq", 1),
+        ("read_iq", 1),
+    ]
+    assert output.getvalue() == b"\x00\x80\x00\x00"
+def test_rtl_tcp_bridge_cli_exposes_required_receiver_options():
+    result = subprocess.run(
+        [sys.executable, "-m", "autorx.rtl_tcp_rx", "--help"],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert result.returncode == 0
+    assert "--host" in result.stdout
+    assert "--sample-rate" in result.stdout
+
+
+def test_rtl_tcp_iq_command_uses_bridge_and_rejects_bias():
+    command = sdr_wrappers.get_sdr_iq_cmd(
+        sdr_type="RTL_TCP",
+        frequency=401_500_000,
+        sample_rate=96_000,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+        ppm=-12,
+        gain=49.6,
+    )
+
+    assert "python -m autorx.rtl_tcp_rx" in command
+    assert "--host rtl.example --port 1234" in command
+    assert "--frequency 401500000 --sample-rate 96000" in command
+    assert "--ppm -12 --gain 49.6" in command
+
+    with pytest.raises(ValueError, match="Bias-T"):
+        sdr_wrappers.get_sdr_iq_cmd(
+            sdr_type="RTL_TCP",
+            frequency=401_500_000,
+            sample_rate=96_000,
+            bias=True,
+        )
+
+
+def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec():
+    command = sdr_wrappers.get_sdr_fm_cmd(
+        sdr_type="RTL_TCP",
+        frequency=401_500_000,
+        filter_bandwidth=15_000,
+        sample_rate=48_000,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+    )
+
+    assert "python -m autorx.rtl_tcp_rx" in command
+    assert "--sample-rate 15000" in command
+    assert "./iq_dec --FM" in command
+    assert "rtl_fm" not in command
+
+
+def test_rtl_tcp_config_validates_endpoint_and_allocates_virtual_receivers(
+    tmp_path, monkeypatch
+):
+    source = Path(config.__file__).resolve().parents[1] / "station.cfg.example"
+    cfg = tmp_path / "station.cfg"
+    cfg.write_text(
+        source.read_text().replace("sdr_type = RTLSDR", "sdr_type = RTL_TCP").replace(
+            "sdr_quantity = 1", "sdr_quantity = 2"
+        ).replace("sdr_hostname = localhost", "sdr_hostname = rtl.example").replace(
+            "sdr_port = 5555", "sdr_port = 1234"
+        )
+    )
+    calls = []
+
+    def test_endpoint(**kwargs):
+        calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(config, "test_sdr", test_endpoint)
+
+    result = config.read_auto_rx_config(str(cfg))
+
+    assert calls == [
+        {
+            "sdr_type": "RTL_TCP",
+            "sdr_hostname": "rtl.example",
+            "sdr_port": 1234,
+            "timeout": 60,
+        }
+    ]
+    assert set(result["sdr_settings"]) == {"RTL_TCP-01", "RTL_TCP-02"}
+    assert result["sdr_settings"]["RTL_TCP-01"]["bias"] is False
+
+
+def test_rtl_tcp_config_rejects_bias_tee(tmp_path, monkeypatch):
+    source = Path(config.__file__).resolve().parents[1] / "station.cfg.example"
+    cfg = tmp_path / "station.cfg"
+    cfg.write_text(
+        source.read_text()
+        .replace("sdr_type = RTLSDR", "sdr_type = RTL_TCP")
+        .replace("bias = False", "bias = True")
+    )
+    monkeypatch.setattr(config, "test_sdr", lambda **kwargs: True)
+
+    assert config.read_auto_rx_config(str(cfg)) is None

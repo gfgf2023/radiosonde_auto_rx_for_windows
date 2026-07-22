@@ -15,6 +15,7 @@ import numpy as np
 from .utils import rtlsdr_test, reset_rtlsdr_by_serial, reset_all_rtlsdrs, timeout_cmd
 from .ka9q import *
 from . import platform as autorx_platform
+from .rtl_tcp import RtlTcpClient
 
 
 def test_sdr(
@@ -30,7 +31,7 @@ def test_sdr(
     """
     Test the prescence / functionality of a SDR.
 
-    sdr_type (str): 'RTLSDR', 'SpyServer' or 'KA9Q'
+    sdr_type (str): 'RTLSDR', 'RTL_TCP', 'SpyServer' or 'KA9Q'
 
     Arguments for RTLSDRs:
     rtl_device_id (str) - Device ID for a RTLSDR
@@ -52,6 +53,19 @@ def test_sdr(
             logging.error(f"RTLSDR #{rtl_device_idx} non-functional.")
 
         return _ok
+
+    elif sdr_type == "RTL_TCP":
+        client = RtlTcpClient(sdr_hostname, sdr_port, timeout=timeout)
+        try:
+            client.connect()
+            return True
+        except (ConnectionError, OSError) as error:
+            logging.critical(
+                f"RTL-TCP ({sdr_hostname}:{sdr_port}) - handshake failed: {error}"
+            )
+            return False
+        finally:
+            client.close()
 
     
     elif sdr_type == "KA9Q":
@@ -365,6 +379,27 @@ def get_sdr_iq_cmd(
 
         return _cmd
 
+    if sdr_type == "RTL_TCP":
+        if bias:
+            raise ValueError("Bias-T is not supported by the base RTL-TCP protocol")
+
+        _gain = -1 if gain is None else gain
+        _cmd = (
+            "python -m autorx.rtl_tcp_rx "
+            f"--host {autorx_platform.quote_command_argument(sdr_hostname)} "
+            f"--port {int(sdr_port)} "
+            f"--frequency {int(frequency)} "
+            f"--sample-rate {int(sample_rate)} "
+            f"--ppm {int(ppm)} "
+            f"--gain {_gain:g} "
+            "2>/dev/null | "
+        )
+
+        if dc_block:
+            _cmd += _dc_remove
+
+        return _cmd
+
     if sdr_type == "SpyServer":
         _cmd = (
             f"{autorx_platform.quote_command_argument(ss_iq_path)} "
@@ -463,6 +498,34 @@ def get_sdr_fm_cmd(
         _cmd += "2> /dev/null | "
 
         return _cmd
+
+    if sdr_type == "RTL_TCP":
+        if bias:
+            raise ValueError("Bias-T is not supported by the base RTL-TCP protocol")
+
+        _iq_cmd = get_sdr_iq_cmd(
+            sdr_type="RTL_TCP",
+            frequency=frequency,
+            sample_rate=filter_bandwidth,
+            ppm=ppm,
+            gain=gain,
+            sdr_hostname=sdr_hostname,
+            sdr_port=sdr_port,
+        )
+        _cmd = (
+            f"{_iq_cmd}"
+            f"./iq_dec --FM - {int(filter_bandwidth)} 16 2>/dev/null | "
+            f"sox -t raw -r {int(filter_bandwidth)} -e s -b 16 -c 1 - "
+            f"-r {int(sample_rate)} -b 16 -t wav - "
+        )
+
+        if highpass:
+            _cmd += f"highpass {int(highpass)} "
+
+        if lowpass:
+            _cmd += f"lowpass {int(lowpass)} "
+
+        return _cmd + "2> /dev/null | "
 
     else:
         logging.critical(f"FM Demod Source - Unsupported SDR type {sdr_type}")
