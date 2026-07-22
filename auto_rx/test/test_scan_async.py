@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+import autorx
 from autorx import platform
 from autorx import scan_async
 from autorx import sdr_wrappers
@@ -111,3 +112,43 @@ def test_async_ka9q_command_rejects_windows_percent_expansion(monkeypatch):
                 frequency=401500000, rs_path="./", sdr_type="KA9Q", dwell_time=1
             )
         )
+
+
+def test_async_debug_capture_suppresses_windows_tee(monkeypatch):
+    captured = {}
+
+    class Process:
+        returncode = 1
+
+        async def communicate(self):
+            return (b"", b"")
+
+        async def wait(self):
+            return self.returncode
+
+    async def fake_create_subprocess_shell(command, **kwargs):
+        captured["command"] = command
+        return Process()
+
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(autorx, "logging_path", r"C:\debug")
+    monkeypatch.setattr(
+        sdr_wrappers, "get_sdr_iq_cmd", lambda **kwargs: "pcmrecord --raw sonde | "
+    )
+    monkeypatch.setattr(sdr_wrappers, "get_sdr_name", lambda *args, **kwargs: "KA9Q sonde")
+    monkeypatch.setattr(sdr_wrappers, "shutdown_sdr", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scan_async.asyncio, "create_subprocess_shell", fake_create_subprocess_shell
+    )
+
+    asyncio.run(
+        scan_async.detect_sonde_async(
+            frequency=401500000,
+            rs_path="./",
+            sdr_type="KA9Q",
+            dwell_time=1,
+            save_detection_audio=True,
+        )
+    )
+
+    assert "tee " not in captured["command"]

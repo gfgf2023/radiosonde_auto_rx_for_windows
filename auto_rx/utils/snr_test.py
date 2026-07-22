@@ -69,7 +69,10 @@ def run_demod(filename, demod='RS92'):
 	else:
 		demod_bin = RS41_DEMOD
 
-	demod_command = "cat %s | %s" % (filename, demod_bin)
+	demod_command = "%s < %s" % (
+		demod_bin,
+		autorx_platform.quote_command_argument(filename),
+	)
 
 	# Run demod.
 	with open(os.devnull, 'w') as devnull:

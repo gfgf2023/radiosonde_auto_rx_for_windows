@@ -119,6 +119,17 @@ def test_prepare_shell_command_allows_isolated_windows_percent(monkeypatch):
     assert platform.prepare_shell_command("rtl_power -c 25%") == "rtl_power -c 25%"
 
 
+def test_prepare_shell_command_suppresses_windows_debug_tee(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    prepared = platform.prepare_shell_command(
+        "source | tee debug.raw | ./rs41mod --json"
+    )
+
+    assert "tee " not in prepared
+    assert prepared.endswith(r".\rs41mod.exe --json")
+
+
 def test_prepare_shell_command_translates_percent_free_windows_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "win32")
 

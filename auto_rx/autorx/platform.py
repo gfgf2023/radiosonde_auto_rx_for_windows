@@ -34,6 +34,7 @@ _LOCAL_DECODER_TOKEN = re.compile(
 )
 _CMD_METACHARACTERS = frozenset("&|<>()^\"")
 _CMD_ENVIRONMENT_EXPANSION = re.compile(r"%[^%]+%")
+_DEBUG_TEE_STAGE = re.compile(r"(?<!\S)tee\s+.+?\s+\|")
 
 
 def is_windows():
@@ -78,6 +79,7 @@ def prepare_shell_command(command):
     if isinstance(command, str):
         if _CMD_ENVIRONMENT_EXPANSION.search(command):
             raise ValueError("Windows CMD commands containing percent signs are not supported.")
+        command = _DEBUG_TEE_STAGE.sub("", command)
         return translate_command(command)
 
     if isinstance(command, (list, tuple)):
