@@ -1,9 +1,36 @@
 """Small platform-specific command helpers."""
 
 import os
+import re
 import signal
 import subprocess
 import sys
+
+
+LOCAL_DECODER_EXECUTABLES = frozenset(
+    (
+        "dft_detect",
+        "dfm09mod",
+        "m10mod",
+        "rs41mod",
+        "rs92mod",
+        "fsk_demod",
+        "mk2a1680mod",
+        "lms6Xmod",
+        "meisei100mod",
+        "imet54mod",
+        "mp3h1mod",
+        "m20mod",
+        "imet4iq",
+        "mts01mod",
+        "iq_dec",
+        "weathex301d",
+    )
+)
+
+_LOCAL_DECODER_TOKEN = re.compile(
+    r"(?<!\S)\./(?P<executable>[A-Za-z0-9_-]+)(?:\.exe)?(?=$|\s|[|;&])"
+)
 
 
 def is_windows():
@@ -28,7 +55,15 @@ def resolve_executable(executable):
 def translate_command(command):
     """Translate shell null-device references for the current platform."""
     if is_windows():
-        return command.replace("/dev/null", null_device())
+        command = command.replace("/dev/null", null_device())
+
+        def replace_local_decoder(match):
+            executable = match.group("executable")
+            if executable not in LOCAL_DECODER_EXECUTABLES:
+                return match.group(0)
+            return ".\\" + resolve_executable(executable)
+
+        return _LOCAL_DECODER_TOKEN.sub(replace_local_decoder, command)
     return command
 
 

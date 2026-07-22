@@ -30,6 +30,24 @@ def test_translate_command_uses_nul_on_windows(monkeypatch):
     assert platform.translate_command("rs41mod 2>/dev/null") == "rs41mod 2>NUL"
 
 
+def test_translate_command_resolves_windows_local_decoder_executable(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    assert (
+        platform.translate_command("./rs41mod --json 2>/dev/null")
+        == r".\rs41mod.exe --json 2>NUL"
+    )
+
+
+def test_translate_command_resolves_windows_local_decoder_pipeline(monkeypatch):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+
+    assert (
+        platform.translate_command("./iq_dec --iq | ./weathex301d --json 2>/dev/null")
+        == r".\iq_dec.exe --iq | .\weathex301d.exe --json 2>NUL"
+    )
+
+
 def test_platform_helpers_preserve_linux_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "linux")
 
