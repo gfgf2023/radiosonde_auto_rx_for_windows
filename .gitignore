@@ -85,3 +85,7 @@ weathex/weathex301d
 
 # Local Git worktrees used for isolated development.
 /.worktrees/
+
+# Generated Windows release archives and staging directories.
+/release/windows/auto_rx-windows-*/
+/release/windows/auto_rx-windows-*.zip

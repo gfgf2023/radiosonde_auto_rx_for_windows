@@ -1,0 +1,151 @@
+# Windows station configuration for radiosonde_auto_rx.
+#
+# This file starts as a local RTL-SDR configuration. Copy it to station.cfg,
+# set the station details, then adjust the SDR section for your receiver.
+#
+# RTLSDR example (active):
+#   sdr_type = RTLSDR, sdr_quantity = 1, device_idx = 0
+# RTL_TCP example: replace the active [sdr] and [sdr_1] values with:
+#   sdr_type = RTL_TCP
+#   sdr_quantity = 1
+#   sdr_hostname = 192.0.2.10
+#   sdr_port = 1234
+#   device_idx = 0
+#   ppm = 0
+#   gain = -1
+#   bias = False
+# RTL_TCP is one tuner, so sdr_quantity must remain 1 and Bias-T must be False.
+
+[sdr]
+sdr_type = RTLSDR
+sdr_quantity = 1
+sdr_hostname = localhost
+sdr_port = 1234
+
+[sdr_1]
+# RTLSDR device index or unique serial. Use rtl_test to list local devices.
+device_idx = 0
+ppm = 0
+gain = -1
+bias = False
+
+[search_params]
+min_freq = 400.05
+max_freq = 403.00
+rx_timeout = 180
+only_scan = []
+never_scan = []
+always_scan = []
+always_decode = []
+
+[location]
+station_lat = 0.0
+station_lon = 0.0
+station_alt = 0.0
+gpsd_enabled = False
+gpsd_host = localhost
+gpsd_port = 2947
+
+[habitat]
+uploader_callsign = CHANGEME
+upload_listener_position = False
+uploader_antenna = RTL-SDR
+
+[sondehub]
+# Enable after setting a meaningful callsign and station location.
+sondehub_enabled = False
+sondehub_upload_rate = 15
+sondehub_contact_email = none@none.com
+
+[aprs]
+aprs_enabled = False
+upload_rate = 30
+aprs_user = N0CALL
+aprs_pass = 00000
+aprs_server = radiosondy.info
+aprs_port = 14590
+aprs_object_id = <id>
+aprs_use_custom_object_id = False
+aprs_custom_comment = Radiosonde Auto-RX <freq>
+station_beacon_enabled = False
+station_beacon_rate = 30
+station_beacon_comment = radiosonde_auto_rx
+station_beacon_icon = /r
+
+[oziplotter]
+ozi_enabled = False
+ozi_update_rate = 5
+ozi_host = <broadcast>
+ozi_port = 55681
+payload_summary_enabled = False
+payload_summary_host = <broadcast>
+payload_summary_port = 55672
+
+[advanced]
+search_step = 800
+snr_threshold = 10
+min_distance = 1000
+dwell_time = 10
+quantization = 10000
+max_peaks = 10
+scan_dwell_time = 20
+detect_dwell_time = 5
+scan_delay = 10
+payload_id_valid = 5
+temporary_block_time = 60
+decoder_spacing_limit = 15000
+synchronous_upload = False
+max_async_scan_workers = 4
+# These paths are relative to the auto_rx directory in the Windows release.
+sdr_fm_path = ..\\bin\\rtl_fm.exe
+sdr_power_path = ..\\bin\\rtl_power.exe
+ss_iq_path = ..\\bin\\ss_iq.exe
+ss_power_path = ..\\bin\\ss_power.exe
+meisei_experimental = True
+imet54_experimental = True
+lms6-1680_experimental = False
+mrz_experimental = False
+ngp_tweak = False
+wideband_sondes = False
+close_on_encrypted = True
+
+[rotator]
+rotator_enabled = False
+update_rate = 30
+rotator_hostname = 127.0.0.1
+rotator_port = 4533
+rotation_threshold = 5
+rotator_homing_enabled = False
+rotator_homing_delay = 10
+rotator_home_azimuth = 0
+rotator_home_elevation = 0
+azimuth_only = False
+
+[web]
+web_host = 127.0.0.1
+web_port = 5000
+archive_age = 120
+web_control = False
+web_password = none
+kml_refresh_rate = 10
+
+[debugging]
+save_detection_audio = False
+save_decode_audio = False
+save_decode_iq = False
+save_raw_hex = False
+
+[logging]
+per_sonde_log = True
+save_system_log = False
+enable_debug_logging = False
+save_cal_data = False
+
+[filtering]
+max_altitude = 50000
+max_radius_km = 1000
+min_radius_km = 0
+radius_temporary_block = False
+sonde_time_threshold = 3
+enable_realtime_filter = True
+max_velocity = 300

@@ -50,10 +50,40 @@ We also have a channel in the SondeHub Discord server: https://sondehub.org/go/d
 * [Mark Jessop](https://github.com/darksidelemm) - vk5qi@rfhead.net
 * [Michaela Wheeler](https://github.com/TheSkorm) - radiosonde@michaela.lgbt
 
+## Windows Build and Run
+
+The native Windows x64 release is built with MinGW-w64. Install a MinGW-w64
+toolchain that provides `x86_64-w64-mingw32-gcc` and `mingw32-make`, plus
+Python 3. Put the Windows RTL-SDR tools `rtl_fm.exe`, `rtl_power.exe`, and
+`sox.exe` (including every DLL they require) in
+`third_party/windows/bin/`. This directory is deliberately an external input:
+the packager copies its available contents but refuses to create an incomplete
+release when one of the three required executables is missing.
+
+From PowerShell, build the ZIP with:
+
+```powershell
+.\build-windows.ps1
+```
+
+Use `-Version 1.8.2-test`, `-MakeCommand`, or `-Compiler` when the local tool
+names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
+contains `auto_rx/`, the 17 decoder executables and receiver tools in `bin/`,
+plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the
+unpacked staging directory as well as the ZIP. `-ValidateOnly` checks only the
+third-party tool input and is useful in CI.
+
+Extract the ZIP, run `start-auto-rx.cmd`, then edit the generated
+`auto_rx/station.cfg` before receiving. It creates a Python virtual environment
+and installs the application requirements on its first run. The supplied
+`station.cfg.example.windows` has a local RTL-SDR configuration and an explicit
+RTL-TCP conversion example. Run `diagnose.cmd` to check the packaged tools and
+Python before starting; it does not require a connected SDR.
+
 ## Licensing Information
 All software within this repository is licensed under the GNU General Public License v3. Refer this repositories LICENSE file for the full license text.
 
 Radiosonde telemetry data captured via this software and uploaded into the [Sondehub](https://sondehub.org/) Database system is licensed under [Creative Commons BY-SA v2.0](https://creativecommons.org/licenses/by-sa/2.0/). 
 Telemetry data uploaded into the APRS-IS network is generally considered to be released into the public domain. 
 
-By uploading data into these systems (by enabling the relevant uploaders within the `station.cfg` file) you as the user agree for your data to be made available under these licenses. Note that uploading to Sondehub is enabled by default. 
+By uploading data into these systems (by enabling the relevant uploaders within the `station.cfg` file) you as the user agree for your data to be made available under these licenses. Note that uploading to Sondehub is enabled by default.
