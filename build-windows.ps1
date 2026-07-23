@@ -16,6 +16,8 @@ param(
     [string]$ThirdPartyBin,
     [string]$ReleaseRoot,
     [switch]$ValidateOnly,
+    [switch]$StageApplicationOnly,
+    [string]$SourceRoot,
     [switch]$KeepRelease
 )
 
@@ -26,6 +28,9 @@ if ([string]::IsNullOrWhiteSpace($ThirdPartyBin)) {
 }
 if ([string]::IsNullOrWhiteSpace($ReleaseRoot)) {
     $ReleaseRoot = Join-Path $PSScriptRoot "release/windows"
+}
+if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
+    $SourceRoot = $PSScriptRoot
 }
 
 $DecoderPrograms = @(
@@ -74,6 +79,70 @@ function Get-AutoRxVersion {
     return $detected
 }
 
+function Copy-TrackedAutoRxApplication {
+    param(
+        [string]$ApplicationSourceRoot,
+        [string]$DestinationDirectory
+    )
+
+    # Explicitly limit release contents to tracked runtime code and assets. In
+    # particular, never infer release files by recursively copying auto_rx.
+    $trackedFiles = @(& git -C $ApplicationSourceRoot ls-files -- `
+        "auto_rx/auto_rx.py" `
+        "auto_rx/autorx" `
+        "auto_rx/utils" `
+        "auto_rx/requirements.txt")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not list tracked auto_rx application files in '$ApplicationSourceRoot'."
+    }
+
+    foreach ($trackedFile in $trackedFiles) {
+        if (-not $trackedFile.StartsWith("auto_rx/")) {
+            throw "Unexpected tracked application path '$trackedFile'."
+        }
+
+        $sourceFile = Join-Path $ApplicationSourceRoot $trackedFile
+        $relativeDestination = $trackedFile.Substring("auto_rx/".Length)
+        $destinationFile = Join-Path $DestinationDirectory $relativeDestination
+        $destinationParent = Split-Path -Parent $destinationFile
+        New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+        Copy-Item -LiteralPath $sourceFile -Destination $destinationFile -Force
+    }
+
+    # The Windows example is the only station configuration included in a release.
+    $windowsExample = Join-Path $ApplicationSourceRoot "auto_rx/station.cfg.example.windows"
+    if (-not (Test-Path -LiteralPath $windowsExample -PathType Leaf)) {
+        throw "Missing Windows station configuration example: $windowsExample"
+    }
+    Copy-Item -LiteralPath $windowsExample -Destination (Join-Path $DestinationDirectory "station.cfg.example.windows") -Force
+}
+
+function Initialize-ReleaseDirectory {
+    param(
+        [string]$Root,
+        [string]$Name
+    )
+
+    $directory = Join-Path $Root $Name
+    $archive = Join-Path $Root "$Name.zip"
+    if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory -Recurse -Force }
+    if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    return @{ Directory = $directory; Archive = $archive }
+}
+
+if ($StageApplicationOnly) {
+    if ([string]::IsNullOrWhiteSpace($Version)) { $Version = "staging-test" }
+    $stage = Initialize-ReleaseDirectory -Root $ReleaseRoot -Name "auto_rx-windows-$Version"
+    $applicationDirectory = Join-Path $stage.Directory "auto_rx"
+    New-Item -ItemType Directory -Path $applicationDirectory -Force | Out-Null
+    Copy-TrackedAutoRxApplication -ApplicationSourceRoot $SourceRoot -DestinationDirectory $applicationDirectory
+    Compress-Archive -LiteralPath $stage.Directory -DestinationPath $stage.Archive -Force
+    Write-Host "Created application staging directory: $($stage.Directory)"
+    Write-Host "Created application staging archive: $($stage.Archive)"
+    return
+}
+
 Assert-WindowsTools -SourceDirectory $ThirdPartyBin
 if ($ValidateOnly) {
     Write-Host "Validated third-party Windows tools in $ThirdPartyBin."
@@ -109,15 +178,15 @@ try {
 }
 
 $releaseName = "auto_rx-windows-$Version"
-$releaseDirectory = Join-Path $ReleaseRoot $releaseName
-$archivePath = Join-Path $ReleaseRoot "$releaseName.zip"
-if (Test-Path -LiteralPath $releaseDirectory) { Remove-Item -LiteralPath $releaseDirectory -Recurse -Force }
-if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
+$stage = Initialize-ReleaseDirectory -Root $ReleaseRoot -Name $releaseName
+$releaseDirectory = $stage.Directory
+$archivePath = $stage.Archive
 
 $binDirectory = Join-Path $releaseDirectory "bin"
 $applicationDirectory = Join-Path $releaseDirectory "auto_rx"
 New-Item -ItemType Directory -Path $binDirectory -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot "auto_rx") -Destination $applicationDirectory -Recurse -Force
+New-Item -ItemType Directory -Path $applicationDirectory -Force | Out-Null
+Copy-TrackedAutoRxApplication -ApplicationSourceRoot $SourceRoot -DestinationDirectory $applicationDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "README.md") -Destination $releaseDirectory -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "LICENSE") -Destination $releaseDirectory -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "release/windows/start-auto-rx.cmd") -Destination $releaseDirectory -Force

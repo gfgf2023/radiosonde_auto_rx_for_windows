@@ -1,4 +1,5 @@
 import subprocess
+import zipfile
 from pathlib import Path
 
 from autorx.config import read_auto_rx_config
@@ -41,6 +42,29 @@ def run_validation(tool_directory):
             "-ThirdPartyBin",
             str(tool_directory),
             "-ValidateOnly",
+        ],
+        cwd=REPOSITORY_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+
+def run_application_staging(source_root, release_root):
+    return subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(BUILD_SCRIPT),
+            "-SourceRoot",
+            str(source_root),
+            "-ReleaseRoot",
+            str(release_root),
+            "-Version",
+            "privacy-test",
+            "-StageApplicationOnly",
         ],
         cwd=REPOSITORY_ROOT,
         capture_output=True,
@@ -91,3 +115,64 @@ def test_windows_build_validation_accepts_complete_tool_directory(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Validated third-party Windows tools" in result.stdout
+
+
+def test_windows_application_staging_excludes_local_runtime_data(tmp_path):
+    source_root = tmp_path / "source"
+    application = source_root / "auto_rx"
+    sentinel = "station-secret-must-not-be-packaged"
+    tracked_files = {
+        "auto_rx/auto_rx.py": "print('auto_rx')\n",
+        "auto_rx/autorx/__init__.py": "__version__ = 'test'\n",
+        "auto_rx/autorx/static/site.css": "body {}\n",
+        "auto_rx/utils/log_to_kml.py": "print('utility')\n",
+        "auto_rx/requirements.txt": "flask\n",
+        "auto_rx/station.cfg.example.windows": "sdr_type = RTLSDR\n",
+        "auto_rx/log/tracked-log.txt": sentinel,
+    }
+    for relative_path, contents in tracked_files.items():
+        path = source_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+    # These are deliberately untracked local artifacts that a release must not leak.
+    runtime_files = {
+        "station.cfg": f"aprs_user = {sentinel}\n",
+        "log/receiver.log": sentinel,
+        "logs/power.log": sentinel,
+        ".venv/pyvenv.cfg": sentinel,
+        "__pycache__/auto_rx.cpython-312.pyc": sentinel,
+    }
+    for relative_path, contents in runtime_files.items():
+        path = application / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+    subprocess.run(["git", "init", "-q"], cwd=source_root, check=True)
+    subprocess.run(["git", "add", *tracked_files], cwd=source_root, check=True)
+
+    release_root = tmp_path / "release"
+    result = run_application_staging(source_root, release_root)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    staged_application = release_root / "auto_rx-windows-privacy-test" / "auto_rx"
+    archive_path = release_root / "auto_rx-windows-privacy-test.zip"
+    assert (staged_application / "station.cfg.example.windows").is_file()
+    assert not (staged_application / "station.cfg").exists()
+    assert sentinel not in "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in staged_application.rglob("*")
+        if path.is_file()
+    )
+
+    with zipfile.ZipFile(archive_path) as archive:
+        archive_contents = "\n".join(
+            archive.read(name).decode("utf-8", errors="ignore")
+            for name in archive.namelist()
+            if not name.endswith("/")
+        )
+        archive_names = set(archive.namelist())
+
+    assert sentinel not in archive_contents
+    assert any(name.endswith("auto_rx/station.cfg.example.windows") for name in archive_names)
+    assert not any(name.endswith("auto_rx/station.cfg") for name in archive_names)
