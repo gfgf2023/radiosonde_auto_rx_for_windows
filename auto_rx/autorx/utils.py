@@ -76,8 +76,8 @@ def check_rs_utils(config):
         Currently we just check there is a file present - we don't check functionality.
     """
     for _file in REQUIRED_RS_UTILS:
-        _executable = autorx_platform.resolve_executable(_file)
-        if not os.path.isfile(_executable):
+        _executable = autorx_platform.find_executable(_file)
+        if not os.path.isfile(_executable) and not shutil.which(_executable):
             logging.critical("Binary %s does not exist - did you run build.sh?" % _file)
             return False
         _ = timeout_cmd()
@@ -953,6 +953,7 @@ def rtlsdr_test(device_idx="0", rtl_sdr_path="rtl_sdr", retries=5):
         logging.debug("RTLSDR - TCP Device, skipping RTLSDR test step.")
         return True
 
+    rtl_sdr_path = autorx_platform.find_executable(rtl_sdr_path)
     _rtl_cmd = "%s%s -d %s -f 400000000 -n 200000 - > /dev/null" % (
         timeout_cmd(5),
         rtl_sdr_path,

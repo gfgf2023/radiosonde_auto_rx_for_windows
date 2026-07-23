@@ -35,7 +35,7 @@ def test_translate_command_resolves_windows_local_decoder_executable(monkeypatch
 
     assert (
         platform.translate_command("./rs41mod --json 2>/dev/null")
-        == r".\rs41mod.exe --json 2>NUL"
+        == "rs41mod.exe --json 2>NUL"
     )
 
 
@@ -44,7 +44,7 @@ def test_translate_command_resolves_windows_rd94rd41drop_executable(monkeypatch)
 
     assert (
         platform.translate_command("./rd94rd41drop --json 2>/dev/null")
-        == r".\rd94rd41drop.exe --json 2>NUL"
+        == "rd94rd41drop.exe --json 2>NUL"
     )
 
 
@@ -53,8 +53,41 @@ def test_translate_command_resolves_windows_local_decoder_pipeline(monkeypatch):
 
     assert (
         platform.translate_command("./iq_dec --iq | ./weathex301d --json 2>/dev/null")
-        == r".\iq_dec.exe --iq | .\weathex301d.exe --json 2>NUL"
+        == r"iq_dec.exe --iq | weathex301d.exe --json 2>NUL"
     )
+
+
+def test_windows_packaged_launch_finds_sibling_bin_decoders(tmp_path, monkeypatch):
+    release_root = tmp_path / "extracted release"
+    application_directory = release_root / "auto_rx"
+    decoder = release_root / "bin" / "rs41mod.exe"
+    application_directory.mkdir(parents=True)
+    decoder.parent.mkdir()
+    decoder.write_bytes(b"placeholder")
+    monkeypatch.chdir(application_directory)
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(platform.shutil, "which", lambda executable: None)
+
+    translated = platform.translate_command("./rs41mod --json 2>/dev/null")
+
+    assert str(decoder.resolve()) in translated
+    assert translated.endswith(" --json 2>NUL")
+    assert platform.executable_exists("rs41mod") is True
+
+
+def test_windows_packaged_launch_checks_sibling_bin_decoders(tmp_path, monkeypatch):
+    release_root = tmp_path / "extracted-release"
+    application_directory = release_root / "auto_rx"
+    decoder = release_root / "bin" / "rs41mod.exe"
+    application_directory.mkdir(parents=True)
+    decoder.parent.mkdir()
+    decoder.write_bytes(b"placeholder")
+    monkeypatch.chdir(application_directory)
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(utils, "REQUIRED_RS_UTILS", ["rs41mod"])
+    monkeypatch.setattr(utils, "_timeout_cmd", None)
+
+    assert utils.check_rs_utils({}) is True
 
 
 @pytest.mark.parametrize("metacharacter", ["&", "|", "<", ">", "(", ")", "^"])
@@ -136,15 +169,15 @@ def test_prepare_shell_command_suppresses_windows_debug_tee(monkeypatch):
     )
 
     assert "tee " not in prepared
-    assert prepared.endswith(r".\rs41mod.exe --json")
+    assert prepared.endswith("rs41mod.exe --json")
 
 
 def test_prepare_shell_command_translates_percent_free_windows_commands(monkeypatch):
     monkeypatch.setattr(platform.sys, "platform", "win32")
 
-    assert platform.prepare_shell_command("./rs41mod --json") == r".\rs41mod.exe --json"
+    assert platform.prepare_shell_command("./rs41mod --json") == "rs41mod.exe --json"
     assert platform.prepare_shell_command(["./rs41mod", "--json"]) == [
-        r".\rs41mod.exe",
+        "rs41mod.exe",
         "--json",
     ]
 

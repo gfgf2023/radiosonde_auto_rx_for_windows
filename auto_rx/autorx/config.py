@@ -13,6 +13,7 @@ import traceback
 import json
 from configparser import RawConfigParser
 from .sdr_wrappers import test_sdr
+from . import platform as autorx_platform
 
 # Dummy initial config with some parameters we need to make the web interface happy.
 global_config = {
@@ -831,6 +832,12 @@ def read_auto_rx_config(filename, no_sdr_test=False):
         auto_rx_config["sdr_settings"] = {}
 
         if auto_rx_config["sdr_type"] == "RTLSDR":
+            if not autorx_platform.executable_exists("rtl_sdr"):
+                logging.critical(
+                    "Config - RTLSDR requires rtl_sdr. Install it or restore bin\\rtl_sdr.exe from the Windows release."
+                )
+                return None
+
             # Multiple RTLSDRs in use - we need to read in each SDRs settings.
             for _n in range(1, auto_rx_config["sdr_quantity"] + 1):
                 _section = "sdr_%d" % _n

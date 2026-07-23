@@ -120,6 +120,27 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec():
     assert "rtl_fm" not in command
 
 
+def test_rtl_tcp_config_does_not_require_local_rtl_sdr(tmp_path, monkeypatch):
+    source = Path(config.__file__).resolve().parents[1] / "station.cfg.example"
+    cfg = tmp_path / "station.cfg"
+    cfg.write_text(
+        source.read_text()
+        .replace("sdr_type = RTLSDR", "sdr_type = RTL_TCP")
+        .replace("sdr_hostname = localhost", "sdr_hostname = rtl.example")
+        .replace("sdr_port = 5555", "sdr_port = 1234")
+    )
+    monkeypatch.setattr(config, "test_sdr", lambda **kwargs: True)
+    monkeypatch.setattr(
+        config.autorx_platform,
+        "executable_exists",
+        lambda executable: pytest.fail("RTL_TCP must not require rtl_sdr"),
+    )
+
+    result = config.read_auto_rx_config(str(cfg))
+
+    assert result["sdr_type"] == "RTL_TCP"
+
+
 def test_rtl_tcp_config_rejects_multiple_receivers_for_one_global_tuner(
     tmp_path, monkeypatch
 ):

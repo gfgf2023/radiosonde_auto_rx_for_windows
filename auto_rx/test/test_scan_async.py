@@ -44,7 +44,7 @@ def test_async_ka9q_command_uses_windows_translation(monkeypatch):
         )
     )
 
-    assert captured["command"].endswith(r".\dft_detect.exe -t 1 --iq --bw 15 --dc - 48000 16 2>NUL")
+    assert captured["command"].endswith("dft_detect.exe -t 1 --iq --bw 15 --dc - 48000 16 2>NUL")
     assert captured["kwargs"]["creationflags"] == getattr(
         __import__("subprocess"), "CREATE_NEW_PROCESS_GROUP", 0x00000200
     )

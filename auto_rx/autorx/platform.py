@@ -4,8 +4,10 @@ import os
 import re
 import shlex
 import signal
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 
 LOCAL_DECODER_EXECUTABLES = frozenset(
@@ -57,6 +59,36 @@ def resolve_executable(executable):
     return executable
 
 
+def find_executable(executable):
+    """Find an executable in the working directory, release bin directory, or PATH.
+
+    Windows releases launch Python from ``auto_rx`` while the native decoders
+    and RTL-SDR tools live in the sibling ``bin`` directory.  Check that
+    release layout explicitly before falling back to PATH, so running
+    ``auto_rx.py`` directly from an extracted release works too.
+    """
+    executable = resolve_executable(executable)
+    if not is_windows():
+        return shutil.which(executable) or executable
+
+    working_directory = Path.cwd()
+    candidates = (
+        working_directory / executable,
+        working_directory.parent / "bin" / executable,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate.resolve())
+
+    return shutil.which(executable) or executable
+
+
+def executable_exists(executable):
+    """Return whether an executable can be located without invoking it."""
+    resolved = find_executable(executable)
+    return os.path.isfile(resolved) or shutil.which(resolved) is not None
+
+
 def translate_command(command):
     """Translate shell null-device references for the current platform."""
     if is_windows():
@@ -66,7 +98,7 @@ def translate_command(command):
             executable = match.group("executable")
             if executable not in LOCAL_DECODER_EXECUTABLES:
                 return match.group(0)
-            return ".\\" + resolve_executable(executable)
+            return quote_command_argument(find_executable(executable))
 
         return _LOCAL_DECODER_TOKEN.sub(replace_local_decoder, command)
     return command

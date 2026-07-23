@@ -40,16 +40,21 @@ $DecoderPrograms = @(
     "weathex301d", "rd94rd41drop"
 )
 
-$RequiredWindowsTools = @("rtl_fm.exe", "rtl_power.exe", "sox.exe")
+$RequiredWindowsTools = @("rtl_fm.exe", "rtl_power.exe", "rtl_sdr.exe", "sox.exe")
+# rtl_sdr.exe dynamically loads these libraries in the standard RTL-SDR
+# Windows distribution. Copying the entire input directory stages any
+# additional DLLs supplied by the distributor as well.
+$RequiredRtlSdrDlls = @("librtlsdr.dll", "libusb-1.0.dll")
+$RequiredWindowsFiles = $RequiredWindowsTools + $RequiredRtlSdrDlls
 
 function Get-MissingWindowsTools {
     param([string]$SourceDirectory)
 
     if (-not (Test-Path -LiteralPath $SourceDirectory -PathType Container)) {
-        return $RequiredWindowsTools
+        return $RequiredWindowsFiles
     }
 
-    return @($RequiredWindowsTools | Where-Object {
+    return @($RequiredWindowsFiles | Where-Object {
         -not (Test-Path -LiteralPath (Join-Path $SourceDirectory $_) -PathType Leaf)
     })
 }
@@ -60,7 +65,7 @@ function Assert-WindowsTools {
     $missing = Get-MissingWindowsTools -SourceDirectory $SourceDirectory
     if ($missing.Count -gt 0) {
         $list = $missing -join ", "
-        throw "Missing required third-party Windows tools in '$SourceDirectory': $list. Place rtl_fm.exe, rtl_power.exe, sox.exe and their required DLLs in third_party/windows/bin before building a release."
+        throw "Missing required third-party Windows files in '$SourceDirectory': $list. Place rtl_fm.exe, rtl_power.exe, rtl_sdr.exe, sox.exe, librtlsdr.dll, libusb-1.0.dll, and every additional DLL required by those tools in third_party/windows/bin before building a release."
     }
 }
 

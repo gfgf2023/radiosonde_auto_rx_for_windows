@@ -2,6 +2,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+from autorx import config as autorx_config
 from autorx.config import read_auto_rx_config
 
 
@@ -85,8 +86,14 @@ def test_windows_release_layout_and_config_are_complete():
     diagnose_script = (RELEASE_SCRIPTS / "diagnose.cmd").read_text(encoding="ascii")
     assert "station.cfg.example.windows" in start_script
     assert "diagnose.cmd" in start_script
-    for executable in ("rtl_fm.exe", "rtl_power.exe", "sox.exe"):
+    for executable in ("rtl_fm.exe", "rtl_power.exe", "rtl_sdr.exe", "sox.exe"):
         assert executable in diagnose_script
+    for required_dll in ("librtlsdr.dll", "libusb-1.0.dll"):
+        assert required_dll in diagnose_script
+    assert "py -3 --version" in diagnose_script
+    assert "py -3 --version" in start_script
+    assert "Failed to create" in start_script
+    assert "Failed to install auto_rx requirements" in start_script
 
     config = read_auto_rx_config(str(WINDOWS_CONFIG), no_sdr_test=True)
     assert config["sdr_type"] == "RTLSDR"
@@ -97,19 +104,46 @@ def test_windows_release_layout_and_config_are_complete():
     assert "sdr_port = 1234" in config_text
 
 
+def test_windows_default_rtlsdr_config_requires_rtl_sdr_without_hardware(monkeypatch):
+    monkeypatch.setattr(
+        autorx_config.autorx_platform, "executable_exists", lambda executable: False
+    )
+    monkeypatch.setattr(
+        autorx_config, "test_sdr", lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("RTL-SDR must not be probed when rtl_sdr is missing")
+        )
+    )
+
+    assert read_auto_rx_config(str(WINDOWS_CONFIG)) is None
+
+
 def test_windows_build_validation_lists_all_missing_tools(tmp_path):
     result = run_validation(tmp_path / "not-present")
     output = result.stdout + result.stderr
 
     assert result.returncode != 0
-    assert "Missing required third-party Windows tools" in output
-    for executable in ("rtl_fm.exe", "rtl_power.exe", "sox.exe"):
-        assert executable in output
+    assert "Missing required third-party Windows files" in output
+    for required_file in (
+        "rtl_fm.exe",
+        "rtl_power.exe",
+        "rtl_sdr.exe",
+        "sox.exe",
+        "librtlsdr.dll",
+        "libusb-1.0.dll",
+    ):
+        assert required_file in output
 
 
 def test_windows_build_validation_accepts_complete_tool_directory(tmp_path):
-    for executable in ("rtl_fm.exe", "rtl_power.exe", "sox.exe"):
-        (tmp_path / executable).write_bytes(b"placeholder")
+    for required_file in (
+        "rtl_fm.exe",
+        "rtl_power.exe",
+        "rtl_sdr.exe",
+        "sox.exe",
+        "librtlsdr.dll",
+        "libusb-1.0.dll",
+    ):
+        (tmp_path / required_file).write_bytes(b"placeholder")
 
     result = run_validation(tmp_path)
 

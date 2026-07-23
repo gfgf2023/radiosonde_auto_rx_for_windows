@@ -54,11 +54,12 @@ We also have a channel in the SondeHub Discord server: https://sondehub.org/go/d
 
 The native Windows x64 release is built with MinGW-w64. Install a MinGW-w64
 toolchain that provides `x86_64-w64-mingw32-gcc` and `mingw32-make`, plus
-Python 3. Put the Windows RTL-SDR tools `rtl_fm.exe`, `rtl_power.exe`, and
-`sox.exe` (including every DLL they require) in
+Python 3. Put the Windows RTL-SDR tools `rtl_fm.exe`, `rtl_power.exe`,
+`rtl_sdr.exe`, and `sox.exe`, plus `librtlsdr.dll`, `libusb-1.0.dll`, and every
+other DLL they require, in
 `third_party/windows/bin/`. This directory is deliberately an external input:
 the packager copies its available contents but refuses to create an incomplete
-release when one of the three required executables is missing.
+release when a required executable or RTL-SDR runtime DLL is missing.
 
 From PowerShell, build the ZIP with:
 
@@ -75,7 +76,8 @@ third-party tool input and is useful in CI.
 
 Extract the ZIP, run `start-auto-rx.cmd`, then edit the generated
 `auto_rx/station.cfg` before receiving. It creates a Python virtual environment
-and installs the application requirements on its first run. The supplied
+and installs the application requirements on its first run. It requires the
+Windows Python launcher to provide `py -3`. The supplied
 `station.cfg.example.windows` has a local RTL-SDR configuration and an explicit
 RTL-TCP conversion example. Run `diagnose.cmd` to check the packaged tools and
 Python before starting; it does not require a connected SDR.
