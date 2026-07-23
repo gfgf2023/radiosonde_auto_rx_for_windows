@@ -15,7 +15,7 @@ import numpy as np
 from .utils import rtlsdr_test, reset_rtlsdr_by_serial, reset_all_rtlsdrs, timeout_cmd
 from .ka9q import *
 from . import platform as autorx_platform
-from .rtl_tcp import RtlTcpClient
+from .rtl_tcp import RtlTcpClient, RtlTcpConnectionError, RtlTcpProtocolError
 from . import rtl_tcp_scan
 
 
@@ -706,17 +706,21 @@ def get_power_spectrum(
     """
 
     if sdr_type == "RTL_TCP":
-        return rtl_tcp_scan.get_power_spectrum(
-            frequency_start=frequency_start,
-            frequency_stop=frequency_stop,
-            step=step,
-            integration_time=integration_time,
-            sdr_hostname=sdr_hostname,
-            sdr_port=sdr_port,
-            ppm=ppm,
-            gain=gain,
-            bias=bias,
-        )
+        try:
+            return rtl_tcp_scan.get_power_spectrum(
+                frequency_start=frequency_start,
+                frequency_stop=frequency_stop,
+                step=step,
+                integration_time=integration_time,
+                sdr_hostname=sdr_hostname,
+                sdr_port=sdr_port,
+                ppm=ppm,
+                gain=gain,
+                bias=bias,
+            )
+        except (RtlTcpConnectionError, RtlTcpProtocolError, OSError) as error:
+            logging.error("RTL-TCP spectrum capture failed: %s", error)
+            return None, None, None
 
     if sdr_type == "RTLSDR":
         # Use rtl_power to obtain power spectral density data

@@ -92,6 +92,162 @@ def test_rtl_tcp_spectrum_uses_client_samples_without_invoking_rtl_power(monkeyp
     assert any(call[0] == "read_iq" for call in calls)
 
 
+def test_rtl_tcp_spectrum_splits_total_dwell_time_between_segments(monkeypatch):
+    durations = []
+
+    monkeypatch.setattr(
+        rtl_tcp_scan,
+        "_capture_segment",
+        lambda client, segment, sample_rate, step, integration_time: (
+            durations.append(integration_time) or np.array([segment.frequency_start]),
+            np.array([1.0]),
+            step,
+        ),
+    )
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def connect(self):
+            pass
+
+        def set_frequency(self, value):
+            pass
+
+        def set_sample_rate(self, value):
+            pass
+
+        def set_ppm(self, value):
+            pass
+
+        def set_gain_mode(self, value):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(rtl_tcp_scan, "RtlTcpClient", Client)
+
+    rtl_tcp_scan.get_power_spectrum(
+        frequency_start=400_400_000,
+        frequency_stop=403_500_000,
+        step=800,
+        integration_time=0.5,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+        settling_samples=0,
+    )
+
+    assert durations == [0.25, 0.25]
+    assert sum(durations) == 0.5
+
+
+def test_rtl_tcp_spectrum_has_no_duplicate_bins_at_segment_boundaries(monkeypatch):
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def connect(self):
+            pass
+
+        def set_frequency(self, value):
+            pass
+
+        def set_sample_rate(self, value):
+            pass
+
+        def set_ppm(self, value):
+            pass
+
+        def set_gain_mode(self, value):
+            pass
+
+        def close(self):
+            pass
+
+    def capture(client, segment, sample_rate, step, integration_time):
+        return (
+            np.array([segment.frequency_start, segment.frequency_stop]),
+            np.array([1.0, 2.0]),
+            step,
+        )
+
+    monkeypatch.setattr(rtl_tcp_scan, "RtlTcpClient", Client)
+    monkeypatch.setattr(rtl_tcp_scan, "_capture_segment", capture)
+
+    frequencies, _, _ = rtl_tcp_scan.get_power_spectrum(
+        frequency_start=400_400_000,
+        frequency_stop=403_500_000,
+        step=800,
+        integration_time=1,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+        settling_samples=0,
+    )
+
+    assert len(frequencies) == len(set(frequencies))
+
+
+def test_rtl_tcp_spectrum_discards_bounded_post_tune_iq(monkeypatch):
+    calls = []
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def connect(self):
+            calls.append("connect")
+
+        def set_frequency(self, value):
+            calls.append("frequency")
+
+        def set_sample_rate(self, value):
+            calls.append("sample_rate")
+
+        def set_ppm(self, value):
+            calls.append("ppm")
+
+        def set_gain_mode(self, value):
+            pass
+
+        def read_iq(self, samples):
+            calls.append(("read_iq", samples))
+            return b""
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(rtl_tcp_scan, "RtlTcpClient", Client)
+    monkeypatch.setattr(
+        rtl_tcp_scan,
+        "_capture_segment",
+        lambda *args: (np.array([400_400_000]), np.array([1.0]), 800),
+    )
+
+    rtl_tcp_scan.get_power_spectrum(
+        frequency_start=400_400_000,
+        frequency_stop=400_500_000,
+        step=800,
+        integration_time=1,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+        settling_samples=123,
+    )
+
+    assert calls.index(("read_iq", 123)) > calls.index("sample_rate")
+    with np.testing.assert_raises(ValueError):
+        rtl_tcp_scan.get_power_spectrum(
+            frequency_start=400_400_000,
+            frequency_stop=400_500_000,
+            step=800,
+            integration_time=1,
+            sdr_hostname="rtl.example",
+            sdr_port=1234,
+            settling_samples=rtl_tcp_scan.MAX_SETTLING_SAMPLES + 1,
+        )
+
+
 def test_sdr_wrapper_routes_rtl_tcp_spectrum_to_the_native_scanner(monkeypatch):
     expected = (np.array([401_500_000]), np.array([12.0]), 800)
     captured = {}
@@ -117,3 +273,36 @@ def test_sdr_wrapper_routes_rtl_tcp_spectrum_to_the_native_scanner(monkeypatch):
         sdr_port=1234,
     ) == expected
     assert captured["sdr_hostname"] == "rtl.example"
+
+
+def test_sdr_wrapper_returns_no_spectrum_for_rtl_tcp_transport_failure(monkeypatch, caplog):
+    from autorx.rtl_tcp import RtlTcpConnectionError, RtlTcpProtocolError
+
+    monkeypatch.setattr(
+        rtl_tcp_scan,
+        "get_power_spectrum",
+        lambda **kwargs: (_ for _ in ()).throw(RtlTcpConnectionError("offline")),
+    )
+
+    assert sdr_wrappers.get_power_spectrum(sdr_type="RTL_TCP") == (None, None, None)
+    assert "RTL-TCP spectrum capture failed: offline" in caplog.text
+
+    monkeypatch.setattr(
+        rtl_tcp_scan,
+        "get_power_spectrum",
+        lambda **kwargs: (_ for _ in ()).throw(RtlTcpProtocolError("bad header")),
+    )
+
+    assert sdr_wrappers.get_power_spectrum(sdr_type="RTL_TCP") == (None, None, None)
+    assert "RTL-TCP spectrum capture failed: bad header" in caplog.text
+
+
+def test_sdr_wrapper_preserves_rtl_tcp_invalid_argument_errors(monkeypatch):
+    monkeypatch.setattr(
+        rtl_tcp_scan,
+        "get_power_spectrum",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("invalid scan range")),
+    )
+
+    with np.testing.assert_raises_regex(ValueError, "invalid scan range"):
+        sdr_wrappers.get_power_spectrum(sdr_type="RTL_TCP")

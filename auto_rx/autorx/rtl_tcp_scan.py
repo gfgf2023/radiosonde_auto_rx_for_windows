@@ -9,6 +9,8 @@ from .rtl_tcp import RtlTcpClient
 
 
 DEFAULT_SAMPLE_RATE = 2_400_000
+DEFAULT_SETTLING_SAMPLES = 16_384
+MAX_SETTLING_SAMPLES = 262_144
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,35 @@ def _configure_client(client, center_frequency, sample_rate, ppm, gain):
         client.set_gain(round(gain * 10))
 
 
+def _split_capture_durations(integration_time, segment_count):
+    """Divide a total dwell time between segments without truncating it."""
+    if not math.isfinite(integration_time) or integration_time < 0:
+        raise ValueError("integration_time must be a finite, non-negative number")
+    if segment_count < 1:
+        raise ValueError("segment_count must be positive")
+
+    duration = integration_time / segment_count
+    durations = [duration] * segment_count
+    # Retain the caller's total exactly where floating-point arithmetic permits.
+    durations[-1] = integration_time - sum(durations[:-1])
+    return durations
+
+
+def _validate_settling_samples(settling_samples):
+    """Validate the bounded amount of post-tune IQ to discard."""
+    if not 0 <= settling_samples <= MAX_SETTLING_SAMPLES:
+        raise ValueError(
+            "settling_samples must be between 0 and "
+            f"{MAX_SETTLING_SAMPLES}"
+        )
+
+
+def _discard_settling_iq(client, settling_samples):
+    """Discard post-tune samples before calculating a segment's PSD."""
+    if settling_samples:
+        client.read_iq(settling_samples)
+
+
 def _capture_segment(client, segment, sample_rate, step, integration_time):
     fft_size = _fft_size(sample_rate, step)
     frame_count = max(1, math.ceil(integration_time * sample_rate / fft_size))
@@ -118,7 +149,7 @@ def _capture_segment(client, segment, sample_rate, step, integration_time):
 
     frequencies = offsets + segment.center_frequency
     mask = (frequencies >= segment.frequency_start) & (
-        frequencies <= segment.frequency_stop
+        frequencies < segment.frequency_stop
     )
     return frequencies[mask], accumulated_power[mask] / completed_frames, bin_width
 
@@ -134,20 +165,25 @@ def get_power_spectrum(
     gain=None,
     bias=False,
     sample_rate=DEFAULT_SAMPLE_RATE,
+    settling_samples=DEFAULT_SETTLING_SAMPLES,
 ):
     """Tune one RTL-TCP endpoint sequentially and return its measured PSD."""
     if bias:
         raise ValueError("Bias-T is not supported by the base RTL-TCP protocol")
 
+    _validate_settling_samples(settling_samples)
+    segments = plan_scan_segments(frequency_start, frequency_stop, sample_rate)
+    capture_durations = _split_capture_durations(integration_time, len(segments))
     frequencies = []
     powers = []
     bin_width = None
-    for segment in plan_scan_segments(frequency_start, frequency_stop, sample_rate):
+    for segment, capture_duration in zip(segments, capture_durations):
         client = RtlTcpClient(sdr_hostname, sdr_port, timeout=integration_time + 10)
         try:
             _configure_client(client, segment.center_frequency, sample_rate, ppm, gain)
+            _discard_settling_iq(client, settling_samples)
             segment_freq, segment_power, bin_width = _capture_segment(
-                client, segment, sample_rate, step, integration_time
+                client, segment, sample_rate, step, capture_duration
             )
             frequencies.append(segment_freq)
             powers.append(segment_power)
@@ -156,6 +192,12 @@ def get_power_spectrum(
 
     if not frequencies:
         return None, None, None
-    return np.concatenate(frequencies), 10 * np.log10(
-        np.maximum(np.concatenate(powers), np.finfo(float).tiny)
+    combined_frequencies = np.concatenate(frequencies)
+    combined_powers = np.concatenate(powers)
+    # Segment output intervals are half-open; retain this as a final guard for
+    # bins that align despite floating-point rounding at an adjacent boundary.
+    _, unique_indices = np.unique(combined_frequencies, return_index=True)
+    unique_indices.sort()
+    return combined_frequencies[unique_indices], 10 * np.log10(
+        np.maximum(combined_powers[unique_indices], np.finfo(float).tiny)
     ), bin_width
