@@ -126,9 +126,9 @@ def test_windows_application_staging_excludes_local_runtime_data(tmp_path):
         "auto_rx/autorx/__init__.py": "__version__ = 'test'\n",
         "auto_rx/autorx/static/site.css": "body {}\n",
         "auto_rx/utils/log_to_kml.py": "print('utility')\n",
+        "auto_rx/log/log_files_go_here.txt": "",
         "auto_rx/requirements.txt": "flask\n",
         "auto_rx/station.cfg.example.windows": "sdr_type = RTLSDR\n",
-        "auto_rx/log/tracked-log.txt": sentinel,
     }
     for relative_path, contents in tracked_files.items():
         path = source_root / relative_path
@@ -139,6 +139,7 @@ def test_windows_application_staging_excludes_local_runtime_data(tmp_path):
     runtime_files = {
         "station.cfg": f"aprs_user = {sentinel}\n",
         "log/receiver.log": sentinel,
+        "log/tracked-log.txt": sentinel,
         "logs/power.log": sentinel,
         ".venv/pyvenv.cfg": sentinel,
         "__pycache__/auto_rx.cpython-312.pyc": sentinel,
@@ -158,6 +159,8 @@ def test_windows_application_staging_excludes_local_runtime_data(tmp_path):
     staged_application = release_root / "auto_rx-windows-privacy-test" / "auto_rx"
     archive_path = release_root / "auto_rx-windows-privacy-test.zip"
     assert (staged_application / "station.cfg.example.windows").is_file()
+    assert (staged_application / "log" / "log_files_go_here.txt").is_file()
+    assert (staged_application / "log" / "log_files_go_here.txt").read_text(encoding="utf-8") == ""
     assert not (staged_application / "station.cfg").exists()
     assert sentinel not in "\n".join(
         path.read_text(encoding="utf-8", errors="ignore")
@@ -175,4 +178,6 @@ def test_windows_application_staging_excludes_local_runtime_data(tmp_path):
 
     assert sentinel not in archive_contents
     assert any(name.endswith("auto_rx/station.cfg.example.windows") for name in archive_names)
+    assert any(name.endswith("auto_rx/log/log_files_go_here.txt") for name in archive_names)
     assert not any(name.endswith("auto_rx/station.cfg") for name in archive_names)
+    assert not any(name.endswith("auto_rx/log/tracked-log.txt") for name in archive_names)

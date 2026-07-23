@@ -91,6 +91,7 @@ function Copy-TrackedAutoRxApplication {
         "auto_rx/auto_rx.py" `
         "auto_rx/autorx" `
         "auto_rx/utils" `
+        "auto_rx/log/log_files_go_here.txt" `
         "auto_rx/requirements.txt")
     if ($LASTEXITCODE -ne 0) {
         throw "Could not list tracked auto_rx application files in '$ApplicationSourceRoot'."
