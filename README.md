@@ -70,7 +70,7 @@ From PowerShell, build the ZIP with:
 .\build-windows.ps1
 ```
 
-Use `-Version 1.9.0-beta11`, `-MakeCommand`, or `-Compiler` when the local tool
+Use `-Version 1.9.0-beta12`, `-MakeCommand`, or `-Compiler` when the local tool
 names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
 contains `auto_rx/`, the 18 decoder executables and receiver tools in `bin/`,
 plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the
@@ -119,6 +119,11 @@ RTL-TCP endpoint; it does not need a locally attached RTL-SDR in this mode.
 Set `gain = -1` to use the tuner's automatic gain control, set a non-negative
 value for a fixed gain in dB, or use `gain = -2` to additionally enable the
 standard RTL-TCP baseband AGC command.
+
+The release requests an RTL-SDR-compatible hardware IQ rate from the RTL-TCP
+server, then uses its local `iq_dec` program to resample for each decoder. Do
+not try to lower the server rate to a decoder rate such as `48000`; the release
+handles that conversion and avoids the server's invalid-sample-rate error.
 
 When using the web interface's manual decoder control, enter a positive finite
 frequency in Hz, for example `401500000`. Invalid values such as `nan` are

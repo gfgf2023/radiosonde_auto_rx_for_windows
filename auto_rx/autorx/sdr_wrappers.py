@@ -20,6 +20,43 @@ from .rtl_tcp import RtlTcpClient, RtlTcpConnectionError, RtlTcpProtocolError
 from . import rtl_tcp_scan
 
 
+RTL_TCP_MIN_SAMPLE_RATE = 240_000
+RTL_TCP_IQ_DEC_MIN_OUTPUT_SAMPLE_RATE = 32_000
+RTL_TCP_FM_OUTPUT_SAMPLE_RATE = 48_000
+
+
+def _rtl_tcp_receiver_sample_rate(decoder_sample_rate):
+    """Choose a valid rtl_tcp rate that iq_dec can decimate exactly."""
+    decoder_sample_rate = int(decoder_sample_rate)
+    if decoder_sample_rate < RTL_TCP_IQ_DEC_MIN_OUTPUT_SAMPLE_RATE:
+        raise ValueError(
+            "RTL-TCP IQ output sample rate must be at least "
+            f"{RTL_TCP_IQ_DEC_MIN_OUTPUT_SAMPLE_RATE} Hz"
+        )
+    if decoder_sample_rate >= RTL_TCP_MIN_SAMPLE_RATE:
+        return decoder_sample_rate
+
+    multiplier = (
+        RTL_TCP_MIN_SAMPLE_RATE + decoder_sample_rate - 1
+    ) // decoder_sample_rate
+    return decoder_sample_rate * multiplier
+
+
+def _rtl_tcp_bridge_command(
+    frequency, sample_rate, ppm, gain, sdr_hostname, sdr_port
+):
+    return (
+        f"{autorx_platform.quote_command_argument(sys.executable)} -m autorx.rtl_tcp_rx "
+        f"--host {autorx_platform.quote_command_argument(sdr_hostname)} "
+        f"--port {int(sdr_port)} "
+        f"--frequency {int(frequency)} "
+        f"--sample-rate {int(sample_rate)} "
+        f"--ppm {int(ppm)} "
+        f"--gain {gain:g} "
+        "2>/dev/null | "
+    )
+
+
 def test_sdr(
     sdr_type: str,
     rtl_device_idx = "0",
@@ -386,16 +423,20 @@ def get_sdr_iq_cmd(
             raise ValueError("Bias-T is not supported by the base RTL-TCP protocol")
 
         _gain = -1 if gain is None else gain
-        _cmd = (
-            f"{autorx_platform.quote_command_argument(sys.executable)} -m autorx.rtl_tcp_rx "
-            f"--host {autorx_platform.quote_command_argument(sdr_hostname)} "
-            f"--port {int(sdr_port)} "
-            f"--frequency {int(frequency)} "
-            f"--sample-rate {int(sample_rate)} "
-            f"--ppm {int(ppm)} "
-            f"--gain {_gain:g} "
-            "2>/dev/null | "
+        _receiver_sample_rate = _rtl_tcp_receiver_sample_rate(sample_rate)
+        _cmd = _rtl_tcp_bridge_command(
+            frequency,
+            _receiver_sample_rate,
+            ppm,
+            _gain,
+            sdr_hostname,
+            sdr_port,
         )
+        if _receiver_sample_rate != sample_rate:
+            _cmd += (
+                f"./iq_dec --bo 16 --IFbw {int(sample_rate) // 1000} "
+                f"- {_receiver_sample_rate} 16 2>/dev/null | "
+            )
 
         if dc_block:
             _cmd += _dc_remove
@@ -505,19 +546,27 @@ def get_sdr_fm_cmd(
         if bias:
             raise ValueError("Bias-T is not supported by the base RTL-TCP protocol")
 
-        _iq_cmd = get_sdr_iq_cmd(
-            sdr_type="RTL_TCP",
-            frequency=frequency,
-            sample_rate=filter_bandwidth,
-            ppm=ppm,
-            gain=gain,
-            sdr_hostname=sdr_hostname,
-            sdr_port=sdr_port,
+        _gain = -1 if gain is None else gain
+        _receiver_sample_rate = max(
+            RTL_TCP_MIN_SAMPLE_RATE,
+            (
+                (2 * int(filter_bandwidth) + RTL_TCP_FM_OUTPUT_SAMPLE_RATE - 1)
+                // RTL_TCP_FM_OUTPUT_SAMPLE_RATE
+            )
+            * RTL_TCP_FM_OUTPUT_SAMPLE_RATE,
+        )
+        _iq_cmd = _rtl_tcp_bridge_command(
+            frequency,
+            _receiver_sample_rate,
+            ppm,
+            _gain,
+            sdr_hostname,
+            sdr_port,
         )
         _cmd = (
             f"{_iq_cmd}"
-            f"./iq_dec --bo 16 --FM - {int(filter_bandwidth)} 16 2>/dev/null | "
-            f"sox -t raw -r {int(filter_bandwidth)} -e s -b 16 -c 1 - "
+            f"./iq_dec --bo 16 --IFbw 48 --FM - {_receiver_sample_rate} 16 2>/dev/null | "
+            f"sox -t raw -r {RTL_TCP_FM_OUTPUT_SAMPLE_RATE} -e s -b 16 -c 1 - "
             f"-r {int(sample_rate)} -b 16 -t wav - "
         )
 

@@ -119,8 +119,9 @@ def test_rtl_tcp_iq_command_uses_active_interpreter_and_rejects_bias(monkeypatch
 
     assert "/opt/auto-rx/bin/python3 -m autorx.rtl_tcp_rx" in command
     assert "--host rtl.example --port 1234" in command
-    assert "--frequency 401500000 --sample-rate 96000" in command
+    assert "--frequency 401500000 --sample-rate 288000" in command
     assert "--ppm -12 --gain 49.6" in command
+    assert "./iq_dec --bo 16 --IFbw 96 - 288000 16" in command
 
     with pytest.raises(ValueError, match="Bias-T"):
         sdr_wrappers.get_sdr_iq_cmd(
@@ -129,6 +130,30 @@ def test_rtl_tcp_iq_command_uses_active_interpreter_and_rejects_bias(monkeypatch
             sample_rate=96_000,
             bias=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("decoder_rate", "receiver_rate"),
+    ((48_000, 240_000), (50_000, 250_000), (96_000, 288_000), (220_000, 440_000)),
+)
+def test_rtl_tcp_iq_command_resamples_low_decoder_rates_locally(
+    monkeypatch, decoder_rate, receiver_rate
+):
+    monkeypatch.setattr(sdr_wrappers.sys, "executable", "/opt/auto-rx/bin/python3")
+
+    command = sdr_wrappers.get_sdr_iq_cmd(
+        sdr_type="RTL_TCP",
+        frequency=400_438_000,
+        sample_rate=decoder_rate,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+    )
+
+    assert f"--sample-rate {receiver_rate}" in command
+    assert (
+        f"./iq_dec --bo 16 --IFbw {decoder_rate // 1000} "
+        f"- {receiver_rate} 16"
+    ) in command
 
 
 def test_rtl_tcp_iq_command_quotes_windows_venv_interpreter(monkeypatch):
@@ -160,8 +185,9 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec(monkeypatch):
     )
 
     assert "/opt/auto-rx/bin/python3 -m autorx.rtl_tcp_rx" in command
-    assert "--sample-rate 15000" in command
-    assert "./iq_dec --bo 16 --FM - 15000 16" in command
+    assert "--sample-rate 240000" in command
+    assert "./iq_dec --bo 16 --IFbw 48 --FM - 240000 16" in command
+    assert "sox -t raw -r 48000" in command
     assert "rtl_fm" not in command
 
 
