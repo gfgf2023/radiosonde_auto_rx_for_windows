@@ -70,7 +70,7 @@ From PowerShell, build the ZIP with:
 .\build-windows.ps1
 ```
 
-Use `-Version 1.9.0-beta14`, `-MakeCommand`, or `-Compiler` when the local tool
+Use `-Version 1.9.0-beta15`, `-MakeCommand`, or `-Compiler` when the local tool
 names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
 contains `auto_rx/`, the 18 decoder executables and receiver tools in `bin/`,
 plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the

@@ -75,6 +75,24 @@ def test_sync_detection_quotes_windows_decoder_path(monkeypatch):
     assert r'"C:\Program Files\auto_rx\dft_detect.exe"' in calls[0][0][0]
 
 
+def test_windows_detection_timeout_is_a_completed_probe_not_an_sdr_failure(
+    monkeypatch,
+):
+    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(scan, "get_sdr_iq_cmd", lambda **kwargs: "source | ")
+    monkeypatch.setattr(scan, "get_sdr_name", lambda *args, **kwargs: "RTL-TCP")
+    monkeypatch.setattr(scan, "shutdown_sdr", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scan.autorx_platform,
+        "run_command",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            subprocess.TimeoutExpired(args[0], kwargs["timeout"], output=b"")
+        ),
+    )
+
+    assert scan.detect_sonde(401500000, sdr_type="RTL_TCP") == (None, 0.0)
+
+
 def test_ka9q_setup_uses_a_python_timeout_without_a_windows_numeric_prefix(
     monkeypatch,
 ):

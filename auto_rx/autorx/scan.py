@@ -656,6 +656,7 @@ def detect_sonde(
     )
 
     ret_output = ""
+    FNULL = None
     try:
         FNULL = open(os.devnull, "w")
         _start = time.time()
@@ -666,12 +667,26 @@ def detect_sonde(
             stderr=FNULL,
             check=True,
         ).stdout
-        FNULL.close()
         ret_output = ret_output.decode("utf8")
 
-    except subprocess.TimeoutExpired:
-        logging.error(f"Scanner ({_sdr_name}) - dft_detect timed out.")
-        raise IOError("Possible SDR lockup.")
+    except subprocess.TimeoutExpired as e:
+        if not autorx_platform.is_windows():
+            logging.error(f"Scanner ({_sdr_name}) - dft_detect timed out.")
+            raise IOError("Possible SDR lockup.")
+
+        # Windows uses the Python process timeout because no compatible
+        # `timeout` command is available.  The continuous IQ pipeline is
+        # therefore expected to be terminated at the end of this probe.
+        # run_command preserves dft_detect's captured stdout on the exception.
+        _output = e.output or b""
+        ret_output = (
+            _output.decode("utf8", errors="replace")
+            if isinstance(_output, bytes)
+            else str(_output)
+        )
+        logging.debug(
+            f"Scanner ({_sdr_name}) - dft_detect probe window elapsed."
+        )
     except subprocess.CalledProcessError as e:
         # dft_detect returns a code of 1 if no sonde is detected.
         # logging.debug("Scanner - dfm_detect return code: %s" % e.returncode)
@@ -694,6 +709,8 @@ def detect_sonde(
         )
         return (None, 0.0)
     finally:
+        if FNULL is not None:
+            FNULL.close()
         # Always release the SDR channel, even on failure
         shutdown_sdr(sdr_type, rtl_device_idx, sdr_hostname, frequency, scan=True)
 
