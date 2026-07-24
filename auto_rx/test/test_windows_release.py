@@ -82,6 +82,13 @@ def test_windows_release_layout_and_config_are_complete():
         assert f'"{decoder}"' in build_script
     assert "third_party/windows/bin" in build_script
     assert "Compress-Archive" in build_script
+    assert '"WINDOWS_BINARY_STDIN=1"' in build_script
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "windows_binary_stdin.h" in makefile
+    binary_stdin_header = (REPOSITORY_ROOT / "windows_binary_stdin.h").read_text(
+        encoding="utf-8"
+    )
+    assert "_setmode(_fileno(stdin), _O_BINARY)" in binary_stdin_header
 
     start_script = (RELEASE_SCRIPTS / "start-auto-rx.cmd").read_text(encoding="ascii")
     diagnose_script = (RELEASE_SCRIPTS / "diagnose.cmd").read_text(encoding="ascii")

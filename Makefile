@@ -5,6 +5,9 @@ AUTO_RX_VERSION ?= $(shell cd auto_rx && (python -m autorx.version 2>/dev/null |
 #export CC
 
 CFLAGS = -O3 -w -Wno-unused-variable -DVER_JSN_STR=\"$(AUTO_RX_VERSION)\"
+ifeq ($(WINDOWS_BINARY_STDIN),1)
+CFLAGS += -include $(abspath windows_binary_stdin.h)
+endif
 export CFLAGS
 
 SUBDIRS := \

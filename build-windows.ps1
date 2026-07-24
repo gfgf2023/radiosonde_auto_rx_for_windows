@@ -179,7 +179,7 @@ try {
     $env:PATH = "$(Split-Path -Parent $compilerCommand.Source);$env:PATH"
     # `clean` relies on Unix rm in upstream Makefiles. Force a full rebuild
     # instead so the release build only requires the MinGW toolchain.
-    & $make.Source -B all "CC=$($compilerCommand.Name)" "AUTO_RX_VERSION=$Version"
+    & $make.Source -B all "CC=$($compilerCommand.Name)" "AUTO_RX_VERSION=$Version" "WINDOWS_BINARY_STDIN=1"
     if ($LASTEXITCODE -ne 0) { throw "MinGW build failed with exit code $LASTEXITCODE." }
 } finally {
     if ($null -ne $originalPath) { $env:PATH = $originalPath }
