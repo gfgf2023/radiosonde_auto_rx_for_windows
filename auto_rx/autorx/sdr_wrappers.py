@@ -10,6 +10,7 @@ import logging
 import os.path
 import platform
 import subprocess
+import sys
 import numpy as np
 
 from .utils import rtlsdr_test, reset_rtlsdr_by_serial, reset_all_rtlsdrs, timeout_cmd
@@ -386,7 +387,7 @@ def get_sdr_iq_cmd(
 
         _gain = -1 if gain is None else gain
         _cmd = (
-            "python -m autorx.rtl_tcp_rx "
+            f"{autorx_platform.quote_command_argument(sys.executable)} -m autorx.rtl_tcp_rx "
             f"--host {autorx_platform.quote_command_argument(sdr_hostname)} "
             f"--port {int(sdr_port)} "
             f"--frequency {int(frequency)} "

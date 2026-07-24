@@ -79,7 +79,9 @@ def test_rtl_tcp_bridge_cli_exposes_required_receiver_options():
     assert "--sample-rate" in result.stdout
 
 
-def test_rtl_tcp_iq_command_uses_bridge_and_rejects_bias():
+def test_rtl_tcp_iq_command_uses_active_interpreter_and_rejects_bias(monkeypatch):
+    monkeypatch.setattr(sdr_wrappers.sys, "executable", "/opt/auto-rx/bin/python3")
+
     command = sdr_wrappers.get_sdr_iq_cmd(
         sdr_type="RTL_TCP",
         frequency=401_500_000,
@@ -90,7 +92,7 @@ def test_rtl_tcp_iq_command_uses_bridge_and_rejects_bias():
         gain=49.6,
     )
 
-    assert "python -m autorx.rtl_tcp_rx" in command
+    assert "/opt/auto-rx/bin/python3 -m autorx.rtl_tcp_rx" in command
     assert "--host rtl.example --port 1234" in command
     assert "--frequency 401500000 --sample-rate 96000" in command
     assert "--ppm -12 --gain 49.6" in command
@@ -104,7 +106,25 @@ def test_rtl_tcp_iq_command_uses_bridge_and_rejects_bias():
         )
 
 
-def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec():
+def test_rtl_tcp_iq_command_quotes_windows_venv_interpreter(monkeypatch):
+    interpreter = r"C:\Program Files\auto_rx\.venv\Scripts\python.exe"
+    monkeypatch.setattr(sdr_wrappers.sys, "executable", interpreter)
+    monkeypatch.setattr(sdr_wrappers.autorx_platform, "is_windows", lambda: True)
+
+    command = sdr_wrappers.get_sdr_iq_cmd(
+        sdr_type="RTL_TCP",
+        frequency=401_500_000,
+        sample_rate=96_000,
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+    )
+
+    assert command.startswith(f'"{interpreter}" -m autorx.rtl_tcp_rx ')
+
+
+def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec(monkeypatch):
+    monkeypatch.setattr(sdr_wrappers.sys, "executable", "/opt/auto-rx/bin/python3")
+
     command = sdr_wrappers.get_sdr_fm_cmd(
         sdr_type="RTL_TCP",
         frequency=401_500_000,
@@ -114,7 +134,7 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec():
         sdr_port=1234,
     )
 
-    assert "python -m autorx.rtl_tcp_rx" in command
+    assert "/opt/auto-rx/bin/python3 -m autorx.rtl_tcp_rx" in command
     assert "--sample-rate 15000" in command
     assert "./iq_dec --bo 16 --FM - 15000 16" in command
     assert "rtl_fm" not in command
