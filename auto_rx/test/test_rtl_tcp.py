@@ -106,11 +106,11 @@ def test_controls_use_standard_rtl_tcp_command_bytes(rtl_tcp_server):
 
     expected = b"".join(
         (
-            struct.pack("!BI", 0, 401_500_000),
-            struct.pack("!BI", 1, 96_000),
-            struct.pack("!BI", 2, 1),
-            struct.pack("!BI", 3, 496),
-            struct.pack("!Bi", 4, -12),
+            struct.pack("!BI", 1, 401_500_000),
+            struct.pack("!BI", 2, 96_000),
+            struct.pack("!BI", 3, 1),
+            struct.pack("!BI", 4, 496),
+            struct.pack("!Bi", 5, -12),
         )
     )
     for _ in range(100):
@@ -224,3 +224,18 @@ def test_enable_bias_tee_explains_that_base_rtl_tcp_cannot_do_it(rtl_tcp_server)
 
     with pytest.raises(NotImplementedError, match="base RTL-TCP protocol"):
         client.set_bias_tee(True)
+
+
+def test_set_agc_mode_uses_the_standard_rtl_tcp_command(rtl_tcp_server):
+    client = RtlTcpClient("127.0.0.1", rtl_tcp_server.port, timeout=1)
+    client.connect()
+
+    client.set_agc_mode(True)
+
+    expected = struct.pack("!BI", 8, 1)
+    for _ in range(100):
+        if bytes(rtl_tcp_server.commands) == expected:
+            break
+        threading.Event().wait(0.001)
+    assert bytes(rtl_tcp_server.commands) == expected
+    client.close()

@@ -94,4 +94,7 @@ weathex/weathex301d
 /release/windows/auto_rx-windows-*/
 /release/windows/auto_rx-windows-*.zip
 
+# Locally supplied third-party Windows receiver tools.
+/third_party/
+
 dropsonde/rd94rd41drop

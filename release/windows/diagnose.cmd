@@ -4,7 +4,7 @@ set "ROOT=%~dp0"
 set "PATH=%ROOT%bin;%PATH%"
 set "FAILED=0"
 
-for %%F in (rtl_fm.exe rtl_power.exe rtl_sdr.exe sox.exe librtlsdr.dll libusb-1.0.dll dft_detect.exe fsk_demod.exe imet4iq.exe mk2a1680mod.exe rs41mod.exe dfm09mod.exe m10m20mod.exe rs92mod.exe lms6Xmod.exe meisei100mod.exe imet54mod.exe mp3h1mod.exe mts01mod.exe cf06ht03mod.exe c50iq.exe iq_dec.exe weathex301d.exe rd94rd41drop.exe) do (
+for %%F in (rtl_fm.exe rtl_power.exe rtl_sdr.exe sox.exe rtlsdr.dll libusb-1.0.dll dft_detect.exe fsk_demod.exe imet4iq.exe mk2a1680mod.exe rs41mod.exe dfm09mod.exe m10m20mod.exe rs92mod.exe lms6Xmod.exe meisei100mod.exe imet54mod.exe mp3h1mod.exe mts01mod.exe cf06ht03mod.exe c50iq.exe iq_dec.exe weathex301d.exe rd94rd41drop.exe) do (
     if not exist "%ROOT%bin\%%F" (
         echo MISSING: bin\%%F
         set "FAILED=1"

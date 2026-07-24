@@ -44,7 +44,7 @@ $RequiredWindowsTools = @("rtl_fm.exe", "rtl_power.exe", "rtl_sdr.exe", "sox.exe
 # rtl_sdr.exe dynamically loads these libraries in the standard RTL-SDR
 # Windows distribution. Copying the entire input directory stages any
 # additional DLLs supplied by the distributor as well.
-$RequiredRtlSdrDlls = @("librtlsdr.dll", "libusb-1.0.dll")
+$RequiredRtlSdrDlls = @("rtlsdr.dll", "libusb-1.0.dll")
 $RequiredWindowsFiles = $RequiredWindowsTools + $RequiredRtlSdrDlls
 
 function Get-MissingWindowsTools {
@@ -65,7 +65,7 @@ function Assert-WindowsTools {
     $missing = Get-MissingWindowsTools -SourceDirectory $SourceDirectory
     if ($missing.Count -gt 0) {
         $list = $missing -join ", "
-        throw "Missing required third-party Windows files in '$SourceDirectory': $list. Place rtl_fm.exe, rtl_power.exe, rtl_sdr.exe, sox.exe, librtlsdr.dll, libusb-1.0.dll, and every additional DLL required by those tools in third_party/windows/bin before building a release."
+        throw "Missing required third-party Windows files in '$SourceDirectory': $list. Place rtl_fm.exe, rtl_power.exe, rtl_sdr.exe, sox.exe, rtlsdr.dll, libusb-1.0.dll, and every additional DLL required by those tools in third_party/windows/bin before building a release."
     }
 }
 
@@ -168,18 +168,21 @@ $make = Get-Command $MakeCommand -ErrorAction SilentlyContinue
 if (-not $make) {
     throw "Could not find '$MakeCommand'. Install MinGW-w64 make or pass -MakeCommand with the correct executable."
 }
-$compiler = Get-Command $Compiler -ErrorAction SilentlyContinue
-if (-not $compiler) {
+$compilerCommand = Get-Command $Compiler -ErrorAction SilentlyContinue
+if (-not $compilerCommand) {
     throw "Could not find '$Compiler'. Install a MinGW-w64 x86_64 compiler or pass -Compiler with the correct executable."
 }
 
 Push-Location $PSScriptRoot
 try {
-    & $make.Source clean "CC=$($compiler.Source)" "AUTO_RX_VERSION=$Version"
-    if ($LASTEXITCODE -ne 0) { throw "MinGW clean failed with exit code $LASTEXITCODE." }
-    & $make.Source all "CC=$($compiler.Source)" "AUTO_RX_VERSION=$Version"
+    $originalPath = $env:PATH
+    $env:PATH = "$(Split-Path -Parent $compilerCommand.Source);$env:PATH"
+    # `clean` relies on Unix rm in upstream Makefiles. Force a full rebuild
+    # instead so the release build only requires the MinGW toolchain.
+    & $make.Source -B all "CC=$($compilerCommand.Name)" "AUTO_RX_VERSION=$Version"
     if ($LASTEXITCODE -ne 0) { throw "MinGW build failed with exit code $LASTEXITCODE." }
 } finally {
+    if ($null -ne $originalPath) { $env:PATH = $originalPath }
     Pop-Location
 }
 

@@ -14,11 +14,14 @@ from typing import Optional
 RTL_TCP_MAGIC = b"RTL0"
 RTL_TCP_HANDSHAKE_SIZE = 12
 
-SET_FREQUENCY = 0
-SET_SAMPLE_RATE = 1
-SET_GAIN_MODE = 2
-SET_GAIN = 3
-SET_PPM = 4
+# The rtl_tcp command IDs are defined by rtl-sdr's rtl_tcp.c and start at 1.
+# Sending zero-based IDs makes every following control land in the wrong slot.
+SET_FREQUENCY = 1
+SET_SAMPLE_RATE = 2
+SET_GAIN_MODE = 3
+SET_GAIN = 4
+SET_PPM = 5
+SET_AGC_MODE = 8
 
 
 class RtlTcpProtocolError(ConnectionError):
@@ -109,6 +112,10 @@ class RtlTcpClient:
         if not -(2**31) <= ppm < 2**31:
             raise ValueError("ppm must fit in a signed 32-bit integer")
         self._send_command(struct.pack("!Bi", SET_PPM, ppm))
+
+    def set_agc_mode(self, enabled: bool) -> None:
+        """Enable or disable the rtl_tcp baseband AGC extension."""
+        self._send_unsigned_command(SET_AGC_MODE, int(bool(enabled)))
 
     def set_bias_tee(self, enabled: bool) -> None:
         """Reject Bias-T requests because it is not in the base RTL-TCP spec."""

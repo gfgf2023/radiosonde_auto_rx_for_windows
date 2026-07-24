@@ -58,7 +58,7 @@ We also have a channel in the SondeHub Discord server: https://sondehub.org/go/d
 The native Windows x64 release is built with MinGW-w64. Install a MinGW-w64
 toolchain that provides `x86_64-w64-mingw32-gcc` and `mingw32-make`, plus
 Python 3. Put the Windows RTL-SDR tools `rtl_fm.exe`, `rtl_power.exe`,
-`rtl_sdr.exe`, and `sox.exe`, plus `librtlsdr.dll`, `libusb-1.0.dll`, and every
+`rtl_sdr.exe`, and `sox.exe`, plus `rtlsdr.dll`, `libusb-1.0.dll`, and every
 other DLL they require, in
 `third_party/windows/bin/`. This directory is deliberately an external input:
 the packager copies its available contents but refuses to create an incomplete
@@ -70,9 +70,9 @@ From PowerShell, build the ZIP with:
 .\build-windows.ps1
 ```
 
-Use `-Version 1.8.2-test`, `-MakeCommand`, or `-Compiler` when the local tool
+Use `-Version 1.9.0-beta10`, `-MakeCommand`, or `-Compiler` when the local tool
 names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
-contains `auto_rx/`, the 17 decoder executables and receiver tools in `bin/`,
+contains `auto_rx/`, the 18 decoder executables and receiver tools in `bin/`,
 plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the
 unpacked staging directory as well as the ZIP. `-ValidateOnly` checks only the
 third-party tool input and is useful in CI.
@@ -80,10 +80,45 @@ third-party tool input and is useful in CI.
 Extract the ZIP, run `start-auto-rx.cmd`, then edit the generated
 `auto_rx/station.cfg` before receiving. It creates a Python virtual environment
 and installs the application requirements on its first run. It requires the
-Windows Python launcher to provide `py -3`. The supplied
-`station.cfg.example.windows` has a local RTL-SDR configuration and an explicit
-RTL-TCP conversion example. Run `diagnose.cmd` to check the packaged tools and
-Python before starting; it does not require a connected SDR.
+Windows Python launcher to provide `py -3`. Run `diagnose.cmd` to check the
+packaged tools and Python before starting; it does not require a connected SDR.
+
+The generated configuration defaults to a locally connected USB receiver:
+
+```ini
+[sdr]
+sdr_type = RTLSDR
+```
+
+Connect an RTL-SDR, ensure no other program owns it, and keep this setting to
+use the local receiver. A startup error such as `RTLSDR 1 config - SDR
+unresponsive` means that the local `rtl_sdr` probe could not access the device;
+it does not indicate that the packaged programs are missing.
+
+To receive from an existing `rtl_tcp` server instead, edit the `[sdr]` section
+and retain exactly one `[sdr_1]` receiver section:
+
+```ini
+[sdr]
+sdr_type = RTL_TCP
+sdr_quantity = 1
+sdr_hostname = 192.0.2.10
+sdr_port = 1234
+
+[sdr_1]
+ppm = 0
+gain = -1
+bias = False
+```
+
+Replace `192.0.2.10` and `1234` with the reachable RTL-TCP host and port, then
+start `rtl_tcp` on that server before running `start-auto-rx.cmd`. Standard
+RTL-TCP exposes one physical tuner, so `sdr_quantity` must be `1`, and Bias-T
+must remain disabled. The Windows release scans and decodes using the configured
+RTL-TCP endpoint; it does not need a locally attached RTL-SDR in this mode.
+Set `gain = -1` to use the tuner's automatic gain control, set a non-negative
+value for a fixed gain in dB, or use `gain = -2` to additionally enable the
+standard RTL-TCP baseband AGC command.
 
 ## Licensing Information
 All software within this repository is licensed under the GNU General Public License v3. Refer to the LICENSE file for the full license text.

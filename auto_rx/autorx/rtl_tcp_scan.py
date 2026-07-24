@@ -95,6 +95,8 @@ def _configure_client(client, center_frequency, sample_rate, ppm, gain):
     client.set_ppm(int(ppm))
     if gain is None or gain < 0:
         client.set_gain_mode(False)
+        if gain == -2:
+            client.set_agc_mode(True)
     else:
         client.set_gain_mode(True)
         client.set_gain(round(gain * 10))

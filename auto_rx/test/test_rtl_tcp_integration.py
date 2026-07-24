@@ -34,6 +34,9 @@ class FakeBridgeClient:
     def set_gain(self, value):
         self.calls.append(("gain", value))
 
+    def set_agc_mode(self, value):
+        self.calls.append(("agc_mode", value))
+
     def read_iq(self, samples):
         self.calls.append(("read_iq", samples))
         if self.chunk is None:
@@ -67,6 +70,27 @@ def test_bridge_configures_manual_gain_and_forwards_signed_iq():
         ("read_iq", 1),
     ]
     assert output.getvalue() == b"\x00\x80\x00\x00"
+
+
+def test_bridge_enables_baseband_agc_for_gain_minus_two():
+    client = FakeBridgeClient(None)
+
+    configure_client(
+        client,
+        frequency=401_500_000,
+        sample_rate=96_000,
+        ppm=0,
+        gain=-2,
+    )
+
+    assert client.calls == [
+        ("connect",),
+        ("frequency", 401_500_000),
+        ("sample_rate", 96_000),
+        ("ppm", 0),
+        ("gain_mode", False),
+        ("agc_mode", True),
+    ]
 def test_rtl_tcp_bridge_cli_exposes_required_receiver_options():
     result = subprocess.run(
         [sys.executable, "-m", "autorx.rtl_tcp_rx", "--help"],

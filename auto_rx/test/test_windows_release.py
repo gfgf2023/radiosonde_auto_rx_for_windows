@@ -89,7 +89,7 @@ def test_windows_release_layout_and_config_are_complete():
     assert "diagnose.cmd" in start_script
     for executable in ("rtl_fm.exe", "rtl_power.exe", "rtl_sdr.exe", "sox.exe"):
         assert executable in diagnose_script
-    for required_dll in ("librtlsdr.dll", "libusb-1.0.dll"):
+    for required_dll in ("rtlsdr.dll", "libusb-1.0.dll"):
         assert required_dll in diagnose_script
     assert "py -3 --version" in diagnose_script
     assert "py -3 --version" in start_script
@@ -129,7 +129,7 @@ def test_windows_build_validation_lists_all_missing_tools(tmp_path):
         "rtl_power.exe",
         "rtl_sdr.exe",
         "sox.exe",
-        "librtlsdr.dll",
+        "rtlsdr.dll",
         "libusb-1.0.dll",
     ):
         assert required_file in output
@@ -141,7 +141,7 @@ def test_windows_build_validation_accepts_complete_tool_directory(tmp_path):
         "rtl_power.exe",
         "rtl_sdr.exe",
         "sox.exe",
-        "librtlsdr.dll",
+        "rtlsdr.dll",
         "libusb-1.0.dll",
     ):
         (tmp_path / required_file).write_bytes(b"placeholder")
