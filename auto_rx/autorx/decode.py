@@ -544,8 +544,8 @@ class SondeDecoder(object):
             if self.save_decode_audio:
                 decode_cmd += f" tee {self.save_decode_audio_path} |"
 
-            # M10 decoder
-            decode_cmd += "./m10mod --json --ptu -vvv 2>/dev/null"
+            # Combined M10/M20 decoder.
+            decode_cmd += "./m10m20mod --json --ptu -vvv 2>/dev/null"
 
         elif self.sonde_type == "IMET":
             # iMet-4 Sondes
