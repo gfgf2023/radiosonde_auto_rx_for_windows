@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from autorx import config
+from autorx import scan
 from autorx import sdr_wrappers
 from autorx.rtl_tcp_rx import configure_client, stream_iq
 
@@ -138,6 +139,36 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec(monkeypatch):
     assert "--sample-rate 15000" in command
     assert "./iq_dec --bo 16 --FM - 15000 16" in command
     assert "rtl_fm" not in command
+
+
+def test_detect_sonde_forwards_rtl_tcp_endpoint_to_lms6_fm_source(monkeypatch):
+    captured = {}
+
+    def get_fm_command(**kwargs):
+        captured.update(kwargs)
+        return "source | "
+
+    monkeypatch.setattr(scan, "get_sdr_fm_cmd", get_fm_command)
+    monkeypatch.setattr(scan, "get_sdr_name", lambda *args, **kwargs: "RTL-TCP")
+    monkeypatch.setattr(scan, "shutdown_sdr", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scan.autorx_platform,
+        "run_command",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            subprocess.CalledProcessError(1, args[0], output=b"")
+        ),
+    )
+
+    assert scan.detect_sonde(
+        1_680_000_000,
+        sdr_type="RTL_TCP",
+        sdr_hostname="rtl.example",
+        sdr_port=2345,
+    ) == (None, 0.0)
+
+    assert captured["sdr_type"] == "RTL_TCP"
+    assert captured["sdr_hostname"] == "rtl.example"
+    assert captured["sdr_port"] == 2345
 
 
 def test_rtl_tcp_config_does_not_require_local_rtl_sdr(tmp_path, monkeypatch):

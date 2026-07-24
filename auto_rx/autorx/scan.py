@@ -578,8 +578,8 @@ def detect_sonde(
             ppm = ppm,
             gain = gain,
             bias = bias,
-            sdr_hostname = "",
-            sdr_port = 1234,
+            sdr_hostname = sdr_hostname,
+            sdr_port = sdr_port,
         )
 
         # rx_test_command = (
