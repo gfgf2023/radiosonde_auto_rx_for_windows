@@ -21,6 +21,7 @@
 import argparse
 import datetime
 import logging
+import math
 import re
 import sys
 import time
@@ -235,6 +236,15 @@ def start_decoder(freq, sonde_type, continuous=False):
     """
     global config, RS_PATH, exporter_functions, rs92_ephemeris, temporary_block_list
 
+    try:
+        freq = float(freq)
+    except (TypeError, ValueError):
+        logging.error("Task Manager - Ignoring decoder request with invalid frequency %r", freq)
+        return
+    if not math.isfinite(freq) or freq <= 0:
+        logging.error("Task Manager - Ignoring decoder request with non-finite or non-positive frequency %r", freq)
+        return
+
     # Allocate a SDR.
     _device_idx = allocate_sdr(
         task_description="Decoder (%s, %.3f MHz)" % (sonde_type, freq / 1e6)
@@ -316,8 +326,15 @@ def handle_scan_results():
         _scan_data = autorx.scan_results.get()
         for _sonde in _scan_data:
             # Extract frequency & type info
-            _freq = _sonde[0]
-            _type = _sonde[1]
+            try:
+                _freq = float(_sonde[0])
+                _type = str(_sonde[1])
+            except (IndexError, TypeError, ValueError):
+                logging.error("Task Manager - Ignoring malformed scan result %r", _sonde)
+                continue
+            if not math.isfinite(_freq) or _freq <= 0:
+                logging.error("Task Manager - Ignoring scan result with invalid frequency %r", _freq)
+                continue
 
             if _freq in autorx.task_list:
                 # Already decoding this sonde, continue.

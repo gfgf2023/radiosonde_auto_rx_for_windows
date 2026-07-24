@@ -12,6 +12,7 @@ import glob
 import io
 import json
 import logging
+import math
 import os
 import random
 import requests
@@ -482,9 +483,11 @@ def flask_start_decoder():
             try:
                 _type = str(request.form["type"])
                 _freq = float(request.form["freq"])
-            except Exception as e:
+                if not math.isfinite(_freq) or _freq <= 0:
+                    raise ValueError("frequency must be a positive finite number")
+            except (KeyError, TypeError, ValueError) as e:
                 logging.error("Web - Error in decoder start request: %s", str(e))
-                abort(500)
+                abort(400)
 
             logging.info("Web - Got decoder start request: %s, %f" % (_type, _freq))
 
