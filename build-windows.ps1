@@ -3,7 +3,7 @@
 Builds a native Windows x64 auto_rx release ZIP with MinGW-w64.
 
 .DESCRIPTION
-Compiles the 17 auto_rx decoder executables, stages the Python application and
+Compiles the 18 auto_rx decoder executables, stages the Python application and
 Windows receiver tools, then creates release/windows/auto_rx-windows-<version>.zip.
 Required third-party tools are read from third_party/windows/bin and validated
 before compilation.
@@ -35,9 +35,9 @@ if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
 
 $DecoderPrograms = @(
     "dft_detect", "fsk_demod", "imet4iq", "mk2a1680mod", "rs41mod",
-    "dfm09mod", "m10mod", "m20mod", "rs92mod", "lms6Xmod",
-    "meisei100mod", "imet54mod", "mp3h1mod", "mts01mod", "iq_dec",
-    "weathex301d", "rd94rd41drop"
+    "dfm09mod", "m10m20mod", "rs92mod", "lms6Xmod", "meisei100mod",
+    "imet54mod", "mp3h1mod", "mts01mod", "cf06ht03mod", "c50iq",
+    "iq_dec", "weathex301d", "rd94rd41drop"
 )
 
 $RequiredWindowsTools = @("rtl_fm.exe", "rtl_power.exe", "rtl_sdr.exe", "sox.exe")

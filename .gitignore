@@ -30,6 +30,7 @@ auto_rx/log_power.csv
 auto_rx/log_power_0.csv
 
 *.o
+*.exe
 
 auto_rx/reset_usb
 auto_rx/rs41ecc
@@ -53,6 +54,10 @@ auto_rx/mXXmod
 auto_rx/mp3h1mod
 auto_rx/mts01mod
 auto_rx/weathex301d
+auto_rx/m10m20mod
+auto_rx/cf06ht03mod
+auto_rx/c50iq
+auto_rx/rd94rd41drop
 
 m10
 meisei100mod
@@ -82,10 +87,11 @@ rs_module/rs92mod
 scan/reset_usb
 scan/rs_detect
 weathex/weathex301d
-
 # Local Git worktrees used for isolated development.
 /.worktrees/
 
 # Generated Windows release archives and staging directories.
 /release/windows/auto_rx-windows-*/
 /release/windows/auto_rx-windows-*.zip
+
+dropsonde/rd94rd41drop

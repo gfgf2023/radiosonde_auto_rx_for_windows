@@ -1,4 +1,4 @@
-AUTO_RX_VERSION ?= $(shell PYTHONPATH=./auto_rx python3 -m autorx.version 2>/dev/null || python -m autorx.version)
+AUTO_RX_VERSION ?= $(shell cd auto_rx && (python -m autorx.version 2>/dev/null || python3 -m autorx.version))
 
 # Uncomment to use clang as a compiler.
 #CC = clang
@@ -10,6 +10,7 @@ export CFLAGS
 SUBDIRS := \
 	demod/mod \
 	imet \
+	c50 \
 	mk2a \
 	scan \
 	dropsonde \

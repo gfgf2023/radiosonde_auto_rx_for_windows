@@ -17,14 +17,15 @@ DECODERS = {
     "mk2a1680mod",
     "rs41mod",
     "dfm09mod",
-    "m10mod",
-    "m20mod",
+    "m10m20mod",
     "rs92mod",
     "lms6Xmod",
     "meisei100mod",
     "imet54mod",
     "mp3h1mod",
     "mts01mod",
+    "cf06ht03mod",
+    "c50iq",
     "iq_dec",
     "weathex301d",
     "rd94rd41drop",
@@ -76,7 +77,7 @@ def run_application_staging(source_root, release_root):
 def test_windows_release_layout_and_config_are_complete():
     build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
 
-    assert len(DECODERS) == 17
+    assert len(DECODERS) == 18
     for decoder in DECODERS:
         assert f'"{decoder}"' in build_script
     assert "third_party/windows/bin" in build_script

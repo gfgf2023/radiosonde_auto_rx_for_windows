@@ -181,6 +181,7 @@ def start_scanner():
             bias=autorx.sdr_list[_device_idx]["bias"],
             save_detection_audio=config["save_detection_audio"],
             wideband_sondes=config["wideband_sondes"],
+            exclude_types=config["exclude_types"],
             temporary_block_list=temporary_block_list,
             temporary_block_time=config["temporary_block_time"],
             max_async_scan_workers=config["max_async_scan_workers"],
@@ -694,6 +695,12 @@ def telemetry_filter(telemetry):
     else:
         dropsonde_callsign_valid = False
 
+    # C50 Sondes can also start with a blank serial numnber
+    if "C50" in telemetry['type']:
+        c50_callsign_valid = "x" not in _serial.split("-")[1]
+    else:
+        c50_callsign_valid = False
+
     # If Vaisala or DFMs, check the callsigns are valid. If M10/M20, iMet, MTS01 or LMS6, just pass it through - we get callsigns immediately and reliably from these.
     if (
         vaisala_callsign_valid
@@ -701,12 +708,15 @@ def telemetry_filter(telemetry):
         or meisei_callsign_valid
         or mrz_callsign_valid
         or dropsonde_callsign_valid
+        or c50_callsign_valid
         or ("M10" in telemetry["type"])
         or ("M20" in telemetry["type"])
         or ("LMS" in telemetry["type"])
         or ("IMET" in telemetry["type"])
         or ("MTS01" in telemetry["type"])
         or ("WXR" in telemetry["type"])
+        or ("CF6" in telemetry["type"])
+        or ("GTH" in telemetry["type"])
     ):
         return "OK"
     else:
@@ -787,7 +797,7 @@ def main():
         "--type",
         type=str,
         default=None,
-        help="Immediately start a decoder for a provided sonde type (Valid Types: RS41, RS92, DFM, M10, M20, IMET, IMETWIDE, IMET5, LMS6, MK2LMS, MEISEI, MRZ, RD94RD41)",
+        help="Immediately start a decoder for a provided sonde type (Valid Types: RS41, RS92, DFM, M10, M20, IMET, IMETWIDE, IMET5, LMS6, MK2LMS, MEISEI, MRZ, RD94RD41, SRSC50, CF6GTH)",
     )
     parser.add_argument(
         "-t",
