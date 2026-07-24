@@ -7,6 +7,7 @@ from .rtl_tcp import RtlTcpClient
 
 
 DEFAULT_CHUNK_SAMPLES = 16_384
+DEFAULT_STREAM_TIMEOUT = 60
 
 
 def configure_client(client, frequency, sample_rate, ppm, gain):
@@ -39,6 +40,12 @@ def parse_args(argv=None):
     parser.add_argument("--port", type=int, default=1234, help="RTL-TCP server port")
     parser.add_argument("--frequency", type=int, required=True, help="Centre frequency in Hz")
     parser.add_argument("--sample-rate", type=int, required=True, help="Sample rate in Hz")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_STREAM_TIMEOUT,
+        help="Socket read timeout in seconds (default: 60)",
+    )
     parser.add_argument("--ppm", type=int, default=0, help="Frequency correction in ppm")
     parser.add_argument(
         "--gain",
@@ -51,7 +58,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    client = RtlTcpClient(args.host, args.port)
+    client = RtlTcpClient(args.host, args.port, timeout=args.timeout)
     try:
         configure_client(
             client,

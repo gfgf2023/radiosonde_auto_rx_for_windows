@@ -8,7 +8,7 @@ import pytest
 from autorx import config
 from autorx import scan
 from autorx import sdr_wrappers
-from autorx.rtl_tcp_rx import configure_client, stream_iq
+from autorx.rtl_tcp_rx import configure_client, parse_args, stream_iq
 
 
 class FakeBridgeClient:
@@ -102,6 +102,14 @@ def test_rtl_tcp_bridge_cli_exposes_required_receiver_options():
     assert result.returncode == 0
     assert "--host" in result.stdout
     assert "--sample-rate" in result.stdout
+
+
+def test_rtl_tcp_bridge_uses_a_long_lived_decoder_read_timeout():
+    args = parse_args(
+        ["--host", "rtl.example", "--frequency", "401500000", "--sample-rate", "240000"]
+    )
+
+    assert args.timeout == 60
 
 
 def test_rtl_tcp_iq_command_uses_active_interpreter_and_rejects_bias(monkeypatch):
