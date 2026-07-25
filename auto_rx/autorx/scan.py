@@ -7,6 +7,7 @@
 #
 import autorx
 import datetime
+import json
 import logging
 import math
 import numpy as np
@@ -425,6 +426,67 @@ def parse_dft_detect_output(ret_output, sdr_name):
     return (_sonde_type, _offset_est)
 
 
+def detect_gth_with_decoder(
+    frequency,
+    rs_path="./",
+    dwell_time=5,
+    sdr_hostname="localhost",
+    sdr_port=5555,
+    rtl_device_idx=0,
+    ppm=0,
+    gain=-1,
+    bias=False,
+):
+    """Confirm a GTH/CF6 peak using the same decoder used for reception."""
+    command = get_sdr_iq_cmd(
+        sdr_type="RTL_TCP",
+        frequency=frequency,
+        sample_rate=240000,
+        rtl_device_idx=rtl_device_idx,
+        ppm=ppm,
+        gain=gain,
+        bias=bias,
+        sdr_hostname=sdr_hostname,
+        sdr_port=sdr_port,
+    )
+    command += (
+        autorx_platform.quote_command_argument(
+            os.path.join(
+                rs_path, autorx_platform.resolve_executable("cf06ht03mod")
+            )
+        )
+        + " --json --auto --IQ 0.0 --lpbw 12 --dc - 240000 16 2>/dev/null"
+    )
+
+    output = b""
+    try:
+        output = autorx_platform.run_command(
+            command,
+            timeout=max(float(dwell_time), 1.0),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        ).stdout
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        output = error.output or b""
+    except Exception as error:
+        logging.debug("GTH decoder probe failed: %s", str(error))
+        return False
+
+    if isinstance(output, bytes):
+        output = output.decode("utf8", errors="replace")
+
+    for line in output.splitlines():
+        try:
+            telemetry = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if telemetry.get("type") in ("GTH", "CF6"):
+            return True
+
+    return False
+
+
 def detect_sonde(
     frequency,
     rs_path="./",
@@ -650,6 +712,24 @@ def detect_sonde(
         sdr_hostname = sdr_hostname, 
         sdr_port = sdr_port
     )
+
+    if sdr_type == "RTL_TCP" and _mode == "IQ":
+        if detect_gth_with_decoder(
+            frequency=frequency,
+            rs_path=rs_path,
+            dwell_time=dwell_time,
+            sdr_hostname=sdr_hostname,
+            sdr_port=sdr_port,
+            rtl_device_idx=rtl_device_idx,
+            ppm=ppm,
+            gain=gain,
+            bias=bias,
+        ):
+            logging.info(
+                f"Scanner ({_sdr_name}) - Confirmed GTH/CF6 telemetry on "
+                f"{frequency/1e6:.3f} MHz."
+            )
+            return ("CF6GTH", 0.0)
 
     logging.debug(
         f"Scanner ({_sdr_name}) - Using detection command: {rx_test_command}"

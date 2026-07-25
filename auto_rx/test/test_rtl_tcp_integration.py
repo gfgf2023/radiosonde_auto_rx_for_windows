@@ -249,7 +249,35 @@ def test_rtl_tcp_detection_uses_dft_detect_native_iq_decimator(monkeypatch):
     ) == (None, 0.0)
 
     assert captured["sample_rate"] == 240_000
-    assert "-t 10 --IQ 0.0 --bw 15 --dc - 240000 16" in commands[0]
+    assert "cf06ht03mod" in commands[0]
+    assert "-t 10 --IQ 0.0 --bw 15 --dc - 240000 16" in commands[-1]
+
+
+def test_rtl_tcp_detection_accepts_a_crc_valid_gth_decoder_probe(monkeypatch):
+    commands = []
+    monkeypatch.setattr(scan, "get_sdr_iq_cmd", lambda **kwargs: "source | ")
+    monkeypatch.setattr(scan, "get_sdr_name", lambda *args, **kwargs: "RTL-TCP")
+    monkeypatch.setattr(scan, "shutdown_sdr", lambda *args, **kwargs: None)
+
+    def run_command(command, **kwargs):
+        commands.append(command)
+        if "cf06ht03mod" not in command:
+            raise AssertionError("generic detector must not run after a valid GTH frame")
+        raise subprocess.TimeoutExpired(
+            command,
+            kwargs["timeout"],
+            output=b'{ "type": "GTH", "frame": 42, "id": "GTH-1234" }\n',
+        )
+
+    monkeypatch.setattr(scan.autorx_platform, "run_command", run_command)
+
+    assert scan.detect_sonde(
+        400_440_000,
+        sdr_type="RTL_TCP",
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+    ) == ("CF6GTH", 0.0)
+    assert "--json --auto --IQ 0.0 --lpbw 12 --dc - 240000 16" in commands[0]
 
 
 def test_detect_sonde_forwards_rtl_tcp_endpoint_to_lms6_fm_source(monkeypatch):

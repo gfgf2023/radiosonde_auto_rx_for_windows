@@ -70,7 +70,7 @@ From PowerShell, build the ZIP with:
 .\build-windows.ps1
 ```
 
-Use `-Version 1.9.0-beta17`, `-MakeCommand`, or `-Compiler` when the local tool
+Use `-Version 1.9.0-beta18`, `-MakeCommand`, or `-Compiler` when the local tool
 names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
 contains `auto_rx/`, the 18 decoder executables and receiver tools in `bin/`,
 plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the
@@ -134,6 +134,9 @@ filtering stage on narrow GFSK signals.
 The GTH/CF6 detector uses the decoder's complete synchronization profile so
 automatically scanned GTH signals can transition into decoding without a
 manual web request.
+RTL-TCP scanning also confirms each 400 MHz peak with a short GTH/CF6 decoder
+probe. A CRC-valid telemetry frame takes priority over the generic correlation
+detector and starts the normal decoder automatically.
 
 When using the web interface's manual decoder control, enter a positive finite
 frequency in Hz, for example `401500000`. Invalid values such as `nan` are
