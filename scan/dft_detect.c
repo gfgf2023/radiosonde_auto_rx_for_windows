@@ -99,7 +99,7 @@ static char meisei_header[] = "110011001101001101001101010100101010110010101010"
 static char mrz_header[] = "1001100110011001""1001101010101010"; // 0xAA 0xBF
 
 //int  cf06ht03_sps = 2400;
-static char cf06ht03_header[] = "01010101" //"01010101""01010101"  // preamble (AA AA) AA  // imet_preamble takes over ...
+static char cf06ht03_header[] = "01010101""01010101""01010101""01010101""01010101"  // preamble AA AA AA AA AA
                                 "10110100""00101011""11000110"; // 2D D4 63
 
 //int  imet54_sps = 4800;
@@ -209,7 +209,7 @@ static rsheader_t rs_hdr[Nrs] = {
     { 4800, 0, 0, rd94rd41_header, 1.0, 0.0, 0.70, 2, NULL, "RD94RD41", tn_RD94RD41, 0, 1, 0.0, 0.0}, // Dropsonde RD94/RD41
     { 2400, 0, 0, mrz_header,      1.5, 0.0, 0.80, 2, NULL, "MRZ",      tn_MRZ,      0, 1, 0.0, 0.0},
     { 1200, 0, 0, mts01_header,    1.0, 0.0, 0.65, 2, NULL, "MTS01",    tn_MTS01,    0, 0, 0.0, 0.0},
-    { 2400, 0, 0, cf06ht03_header, 0.7, 0.0, 0.80, 2, NULL, "CF6GTH",   tn_CF6GTH,   0, 1, 0.0, 0.0},
+    { 2400, 0, 0, cf06ht03_header, 1.0, 0.0, 0.70, 4, NULL, "CF6GTH",   tn_CF6GTH,   0, 1, 0.0, 0.0},
     { 5800, 0, 0, c34_preheader,   1.5, 0.0, 0.80, 2, NULL, "C34C50",   tn_C34C50,   0, 2, 0.0, 0.0}, // C34/C50 2900 Hz tone
     { 4800, 0, 0, weathex_header,  1.0, 0.0, 0.65, 2, NULL, "WXR301",   tn_WXR301,   0, 3, 0.0, 0.0},
     { 5000, 0, 0, wxr2pn9_header,  1.0, 0.0, 0.65, 2, NULL, "WXRPN9",   tn_WXRpn9,   0, 3, 0.0, 0.0},

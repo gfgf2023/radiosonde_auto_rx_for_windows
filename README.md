@@ -70,7 +70,7 @@ From PowerShell, build the ZIP with:
 .\build-windows.ps1
 ```
 
-Use `-Version 1.9.0-beta16`, `-MakeCommand`, or `-Compiler` when the local tool
+Use `-Version 1.9.0-beta17`, `-MakeCommand`, or `-Compiler` when the local tool
 names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
 contains `auto_rx/`, the 18 decoder executables and receiver tools in `bin/`,
 plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the
@@ -131,6 +131,9 @@ preventing Windows text-mode control bytes from terminating a decoder stream.
 GTH/CF6 decoding and 400 MHz type detection consume the supported 240 kHz
 RTL-TCP stream directly and use their native decimators, avoiding an extra
 filtering stage on narrow GFSK signals.
+The GTH/CF6 detector uses the decoder's complete synchronization profile so
+automatically scanned GTH signals can transition into decoding without a
+manual web request.
 
 When using the web interface's manual decoder control, enter a positive finite
 frequency in Hz, for example `401500000`. Invalid values such as `nan` are
