@@ -463,6 +463,7 @@ static int getCorrDFT(int K, unsigned int pos, float *maxv, unsigned int *maxvpo
     xnorm = 0.0;
     for (i = 0; i < rshd->L; i++) xnorm += xn[mp-i]*xn[mp-i];
     xnorm = sqrt(xnorm);
+    if (xnorm <= 0.0) return -4;
 
     mx /= xnorm*N_DFT;
 

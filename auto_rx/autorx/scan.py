@@ -36,6 +36,9 @@ except ImportError:
     logging.warning("Async scanning not available - falling back to sequential scanning")
 
 
+GTH_DETECT_MIN_DWELL = 10.0
+
+
 try:
     from .web import flask_emit_event
 except ImportError:
@@ -251,31 +254,43 @@ def parse_dft_detect_output(ret_output, sdr_name):
     if ret_output is None or ret_output == "":
         return (None, 0.0)
 
-    # Split the line into sonde type and correlation score.
-    _fields = ret_output.split(":")
+    detector_types = {
+        "DFM9", "RS41", "RS92", "LMS6", "IMET5", "MK2LMS", "M10",
+        "M20", "MEISEI", "RD94RD41", "MRZ", "MTS01", "CF6GTH",
+        "C34C50", "WXR301", "WXRPN9", "IMET1AB", "IMETafsk",
+        "IMET1RS", "IMET4",
+    }
+    candidates = []
+    for line in ret_output.splitlines():
+        fields = line.split(":", 1)
+        if len(fields) != 2:
+            continue
 
-    if len(_fields) < 2:
-        logging.error(
-            "Scanner - malformed output from dft_detect: %s" % ret_output.strip()
-        )
-        return (None, 0.0)
+        detector_type = fields[0].strip()
+        if detector_type not in detector_types:
+            continue
 
-    _type = _fields[0]
-    _score = _fields[1]
+        score_field = fields[1]
+        try:
+            if "," in score_field:
+                score_text, offset_text = score_field.split(",", 1)
+                offset_est = float(offset_text.split("Hz", 1)[0].strip())
+            else:
+                score_text = score_field
+                offset_est = 0.0
+            score = float(score_text.strip())
+        except (TypeError, ValueError):
+            continue
 
-    # Detect any frequency correction information:
-    try:
-        if "," in _score:
-            _offset_est = float(_score.split(",")[1].split("Hz")[0].strip())
-            _score = float(_score.split(",")[0].strip())
-        else:
-            _score = float(_score.strip())
-            _offset_est = 0.0
-    except Exception as e:
+        candidates.append((detector_type, score, offset_est))
+
+    if not candidates:
         logging.error(
             "Scanner - Error parsing dft_detect output: %s" % ret_output.strip()
         )
         return (None, 0.0)
+
+    _type, _score, _offset_est = max(candidates, key=lambda item: abs(item[1]))
 
     _sonde_type = None
 
@@ -462,7 +477,7 @@ def detect_gth_with_decoder(
     try:
         output = autorx_platform.run_command(
             command,
-            timeout=max(float(dwell_time), 1.0),
+            timeout=max(float(dwell_time), GTH_DETECT_MIN_DWELL),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             check=True,
@@ -713,24 +728,6 @@ def detect_sonde(
         sdr_port = sdr_port
     )
 
-    if sdr_type == "RTL_TCP" and _mode == "IQ":
-        if detect_gth_with_decoder(
-            frequency=frequency,
-            rs_path=rs_path,
-            dwell_time=dwell_time,
-            sdr_hostname=sdr_hostname,
-            sdr_port=sdr_port,
-            rtl_device_idx=rtl_device_idx,
-            ppm=ppm,
-            gain=gain,
-            bias=bias,
-        ):
-            logging.info(
-                f"Scanner ({_sdr_name}) - Confirmed GTH/CF6 telemetry on "
-                f"{frequency/1e6:.3f} MHz."
-            )
-            return ("CF6GTH", 0.0)
-
     logging.debug(
         f"Scanner ({_sdr_name}) - Using detection command: {rx_test_command}"
     )
@@ -784,7 +781,7 @@ def detect_sonde(
             logging.debug(
                 f"Scanner ({_sdr_name}) - dft_detect exited in {_runtime:.1f} seconds with return code {e.returncode}."
             )
-            return (None, 0.0)
+            ret_output = ""
     except Exception as e:
         # Something broke when running the detection function.
         logging.error(
@@ -802,8 +799,32 @@ def detect_sonde(
         "Scanner - dft_detect exited in %.1f seconds with return code 1." % _runtime
     )
 
-    # Use shared parsing function to ensure consistency with async scanning
-    return parse_dft_detect_output(ret_output, _sdr_name)
+    # Use shared parsing function to ensure consistency with async scanning.
+    detection = parse_dft_detect_output(ret_output, _sdr_name)
+    if detection[0] is not None:
+        return detection
+
+    # The GTH decoder needs a longer CRC-valid frame window than dft_detect.
+    # Keep it as an RTL-TCP fallback so other sonde types are not delayed.
+    if sdr_type == "RTL_TCP" and _mode == "IQ":
+        if detect_gth_with_decoder(
+            frequency=frequency,
+            rs_path=rs_path,
+            dwell_time=dwell_time,
+            sdr_hostname=sdr_hostname,
+            sdr_port=sdr_port,
+            rtl_device_idx=rtl_device_idx,
+            ppm=ppm,
+            gain=gain,
+            bias=bias,
+        ):
+            logging.info(
+                f"Scanner ({_sdr_name}) - Confirmed GTH/CF6 telemetry on "
+                f"{frequency/1e6:.3f} MHz."
+            )
+            return ("CF6GTH", 0.0)
+
+    return detection
 
 
 #
@@ -856,7 +877,10 @@ class SondeScanner(object):
         ngp_tweak=False,
         wideband_sondes=False,
         exclude_types=["IMET1AB","C34C50"],
-        max_async_scan_workers=4
+        max_async_scan_workers=4,
+        cycle_completion_callback=None,
+        known_candidates=None,
+        scan_generation=0,
     ):
         """Initialise a Sonde Scanner Object.
 
@@ -908,6 +932,11 @@ class SondeScanner(object):
             ngp_tweak (bool): Narrow the detection filter when searching for 1680 MHz sondes, to enhance detection of RS92-NGPs.
             wideband_sondes (bool): Use a wider detection filter to allow detection of Weathex and wideband iMet sondes.
             exclude_types (list): List of sonde types to exclude from detection
+            cycle_completion_callback (function): Optional callback invoked
+                after a complete search with (seen_frequencies, scan_generation).
+            known_candidates (dict): Optional frequency-to-type mapping used to
+                avoid re-running type detection for an already known peak.
+            scan_generation (int): Identifier passed to the completion callback.
         """
 
         # Thread flag. This is set to True when a scan is running.
@@ -945,6 +974,9 @@ class SondeScanner(object):
         self.bias = bias
 
         self.callback = callback
+        self.cycle_completion_callback = cycle_completion_callback
+        self.known_candidates = dict(known_candidates or {})
+        self.scan_generation = int(scan_generation)
         self.save_detection_audio = save_detection_audio
         self.wideband_sondes = wideband_sondes
         self.exclude_types = exclude_types
@@ -1018,6 +1050,34 @@ class SondeScanner(object):
         except Exception as e:
             self.log_error("Error handling scan results - %s" % str(e))
 
+    def send_cycle_completion(self, results):
+        """Report one complete search to the optional scheduler callback."""
+        try:
+            if self.cycle_completion_callback is not None and self.sonde_scanner_running:
+                seen_frequencies = [int(result[0]) for result in results]
+                self.cycle_completion_callback(
+                    seen_frequencies,
+                    self.scan_generation,
+                )
+        except Exception as e:
+            self.log_error("Error handling scan-cycle completion - %s" % str(e))
+
+    def known_candidate_for_peak(self, frequency):
+        """Return the nearest known (frequency, type) within one scan bin."""
+        matches = []
+        for known_frequency, sonde_type in self.known_candidates.items():
+            try:
+                known_frequency = int(float(known_frequency))
+            except (TypeError, ValueError):
+                continue
+            distance = abs(known_frequency - float(frequency))
+            if distance <= (self.quantization / 2.0):
+                matches.append((distance, known_frequency, str(sonde_type)))
+        if not matches:
+            return None
+        _, known_frequency, sonde_type = min(matches, key=lambda item: item[0])
+        return known_frequency, sonde_type
+
     def scan_loop(self):
         """Continually perform scans, and pass any results onto the callback function"""
 
@@ -1087,6 +1147,7 @@ class SondeScanner(object):
             else:
                 # Scan completed successfuly! Reset the error counter.
                 self.error_retries = 0
+                self.send_cycle_completion(_results)
 
             # Sleep before starting the next scan.
             for _ in range(self.scan_delay):
@@ -1365,6 +1426,19 @@ class SondeScanner(object):
                 # Exit opportunity.
                 if self.sonde_scanner_running == False:
                     return []
+
+                known_candidate = self.known_candidate_for_peak(_freq)
+                if known_candidate is not None:
+                    known_frequency, known_type = known_candidate
+                    self.log_debug(
+                        "Reusing known %s candidate on %.3f MHz."
+                        % (known_type, known_frequency / 1e6)
+                    )
+                    _search_results.append([known_frequency, known_type])
+                    self.send_to_callback([[known_frequency, known_type]])
+                    if first_only:
+                        return _search_results
+                    continue
 
                 (detected, offset_est) = detect_sonde(
                     _freq,

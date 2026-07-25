@@ -235,6 +235,8 @@
 
             // Update task list now.
             update_task_list();
+            update_time_slice_status();
+            setInterval(update_time_slice_status, 2000);
 
             // List of available map layers.
             var Mapnik = L.tileLayer.provider("OpenStreetMap.Mapnik", {edgeBufferTiles: 2});
@@ -1620,6 +1622,9 @@
             <summary id="summary_element">Tasking: <span id="task_summary"></span></summary>
             <span id="task_details"></span>
         </details>
+        <div id="time-slice-status" style="display:none;font-size:2vh;font-size:calc(var(--vh, 1vh) * 2);">
+            Time Slice: <span id="time-slice-status-text"></span>
+        </div>
         <details id="tableid" style="font-size:2vh;font-size:calc(var(--vh, 1vh) * 2);">
             <summary id="summary_element_telem_table">Telemetry</summary>
             <div id="telem_table"></div>
@@ -1698,6 +1703,11 @@
             </div>
             <div style="display:inline;vertical-align:middle;">
                 <button id="disable-scanner" onclick="disable_scanner();">Disable</button>
+            </div>
+            <div id="time-slice-controls" style="display:none;">
+                <h2>Time Slice Control</h2>
+                <button id="time-slice-skip" onclick="time_slice_skip();">Skip</button>
+                <button id="time-slice-rescan" onclick="time_slice_rescan();">Rescan</button>
             </div>
             <br>
             <div id="rotatorControlForm">

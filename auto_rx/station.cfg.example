@@ -561,6 +561,14 @@ temporary_block_time = 120
 # This only applies when sdr_type = KA9Q. Ignored for RTLSDRs (which scan sequentially).
 # Valid range: 1-32. Automatically capped at CPU core count. Default is 4 (conservative).
 max_async_scan_workers = 4
+
+# Single RTL-TCP tuner time slicing. Enable this to rotate one network tuner
+# across all detected radiosondes. This requires sdr_type = RTL_TCP,
+# sdr_quantity = 1, and an empty always_decode list.
+time_slice_enabled = False
+time_slice_acquire_timeout = 10
+time_slice_decode_time = 15
+time_slice_hard_limit = 25
 # Upload when (seconds_since_utc_epoch%upload_rate) == 0. Otherwise just delay upload_rate seconds between uploads.
 # Setting this to True with multple uploaders should give a higher chance of all uploaders uploading the same frame,
 # however the upload_rate should not be set too low, else there may be a chance of missing upload slots.

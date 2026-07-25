@@ -159,7 +159,9 @@ class SondeDecoder(object):
         experimental_decoder=False,
         save_raw_hex=False,
         wideband_sondes=False,
-        close_on_encrypted=True
+        close_on_encrypted=True,
+        valid_frame_callback=None,
+        slice_id=None,
     ):
         """ Initialise and start a Sonde Decoder.
 
@@ -201,6 +203,9 @@ class SondeDecoder(object):
             wideband_sondes (bool): If True, use a wider bandwidth for iMet sondes. Does not affect settings for any other radiosonde types.
             close_on_encrypted (bool): If True, close the decoder when an encrypted sonde is detected, resulting in the frequency being locked out.
                     If False, we continue to pass data through the processing chain, but with different behaviour (e.g. no sondehub upload)
+            valid_frame_callback (function): Optional callback invoked after a
+                telemetry frame passes validation and filtering.
+            slice_id (int): Time-slice identifier supplied to the callback.
         """
         # Thread running flag
         self.decoder_running = True
@@ -235,6 +240,8 @@ class SondeDecoder(object):
         self.raw_file = None
         self.wideband_sondes = wideband_sondes
         self.close_on_encrypted = close_on_encrypted
+        self.valid_frame_callback = valid_frame_callback
+        self.slice_id = slice_id
 
         # Last decoded position of this sonde
         self.last_positions = {}
@@ -1974,9 +1981,15 @@ class SondeDecoder(object):
             for serial in keys_to_delete:
                 del self.last_positions[serial]
 
+            if _telem_ok == "OK" and self.valid_frame_callback is not None:
+                try:
+                    self.valid_frame_callback(self.slice_id)
+                except Exception as e:
+                    self.log_error("Valid-frame callback error %s" % str(e))
+
             # If the telemetry is OK, send to the exporter functions (if we have any).
             if self.exporters is None:
-                return
+                return _telem_ok
             else:
                 if _telem_ok == "OK":
                     for _exporter in self.exporters:
@@ -2047,7 +2060,7 @@ class SondeDecoder(object):
             f"Decoder ({_sdr_name}) {self.sonde_type} {self.sonde_freq/1e6:.3f} - {line}"
         )
 
-    def stop(self, nowait=False, temporary_lockout=False):
+    def stop(self, nowait=False, temporary_lockout=False, join_timeout=None):
         """ Kill the currently running decoder subprocess """
 
         if temporary_lockout:
@@ -2056,7 +2069,22 @@ class SondeDecoder(object):
         self.decoder_running = False
 
         if self.decoder is not None and (not nowait):
-            self.decoder.join()
+            self.decoder.join(join_timeout)
+            if join_timeout is not None and self.decoder.is_alive():
+                self.log_error(
+                    "Decoder thread did not stop within %.1f seconds; terminating subprocesses."
+                    % join_timeout
+                )
+                for process_name in ("decode_process", "demod_process"):
+                    process = getattr(self, process_name, None)
+                    if process is not None:
+                        try:
+                            platform.terminate_process_tree(process)
+                        except Exception as e:
+                            self.log_error(
+                                "Error terminating %s - %s" % (process_name, str(e))
+                            )
+                self.decoder.join(2.0)
         
         if self.raw_file:
             self.raw_file.close()

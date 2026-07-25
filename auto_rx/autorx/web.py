@@ -24,6 +24,7 @@ import autorx
 import autorx.config
 import autorx.rotator
 import autorx.scan
+from autorx.decode import VALID_SONDE_TYPES
 from autorx.geometry import GenericTrack
 from autorx.utils import check_autorx_versions
 from autorx.log_files import (
@@ -144,6 +145,15 @@ def flask_get_task_list():
 
     # Convert the task list to a JSON blob, and return.
     return json.dumps(_sdr_list)
+
+
+@app.route("/time_slice_status")
+def flask_time_slice_status():
+    """Return the current single-tuner rotation status."""
+    scheduler = autorx.time_slice_scheduler
+    if scheduler is None:
+        return json.dumps({"enabled": False, "state": "disabled"})
+    return json.dumps(scheduler.get_status())
 
 
 @app.route("/rs.kml")
@@ -485,13 +495,24 @@ def flask_start_decoder():
                 _freq = float(request.form["freq"])
                 if not math.isfinite(_freq) or _freq <= 0:
                     raise ValueError("frequency must be a positive finite number")
+                if _type.lstrip("-") not in VALID_SONDE_TYPES:
+                    raise ValueError("unsupported sonde type")
             except (KeyError, TypeError, ValueError) as e:
                 logging.error("Web - Error in decoder start request: %s", str(e))
                 abort(400)
 
             logging.info("Web - Got decoder start request: %s, %f" % (_type, _freq))
 
-            autorx.scan_results.put([[_freq, _type]])
+            if autorx.time_slice_scheduler is not None:
+                autorx.time_slice_actions.put(
+                    {
+                        "command": "add_candidate",
+                        "frequency": _freq,
+                        "sonde_type": _type,
+                    }
+                )
+            else:
+                autorx.scan_results.put([[_freq, _type]])
 
             return "OK"
         else:
@@ -553,13 +574,18 @@ def flask_disable_scanner():
         if (request.form["password"] == autorx.config.web_password) and (
             autorx.config.web_password != "none"
         ):
-            if "SCAN" not in autorx.task_list:
+            if (
+                "SCAN" not in autorx.task_list
+                and autorx.time_slice_scheduler is None
+            ):
                 # No scanner thread running!
                 abort(404)
             else:
                 logging.info("Web - Got scanner stop request.")
                 # Set the scanner inhibit flag so it doesn't automatically start again.
                 autorx.scan_inhibit = True
+                if "SCAN" not in autorx.task_list:
+                    return "OK"
                 _scan_sdr = autorx.task_list["SCAN"]["device_idx"]
                 # Stop the scanner.
                 try:
@@ -600,6 +626,38 @@ def flask_enable_scanner():
             abort(403)
     else:
         abort(403)
+
+
+def _time_slice_control_authorized():
+    return (
+        autorx.config.global_config["web_control"]
+        and request.form.get("password") == autorx.config.web_password
+        and autorx.config.web_password != "none"
+    )
+
+
+@app.route("/time_slice_skip", methods=["POST"])
+def flask_time_slice_skip():
+    """Skip the current decoder slice and continue the rotation."""
+    if not _time_slice_control_authorized():
+        abort(403)
+    scheduler = autorx.time_slice_scheduler
+    if scheduler is None:
+        abort(404)
+    autorx.time_slice_actions.put({"command": "skip"})
+    return "OK"
+
+
+@app.route("/time_slice_rescan", methods=["POST"])
+def flask_time_slice_rescan():
+    """Stop the current slice and begin a fresh discovery scan."""
+    if not _time_slice_control_authorized():
+        abort(403)
+    scheduler = autorx.time_slice_scheduler
+    if scheduler is None:
+        abort(404)
+    autorx.time_slice_actions.put({"command": "rescan"})
+    return "OK"
 
 
 @app.route("/move_rotator", methods=["POST"])

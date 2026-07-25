@@ -60,12 +60,14 @@ from autorx.web import (
 )
 from autorx.gpsd import GPSDAdaptor
 from autorx.sdr_wrappers import shutdown_sdr
+from autorx.time_slice import ActionKind, TimeSliceScheduler
 
 
 # Logging level
 # INFO = Basic status messages
 # DEBUG = Adds detailed information on submodule operations.
 logging_level = logging.INFO
+TIME_SLICE_REDETECT_INTERVAL = 4
 
 
 #
@@ -97,6 +99,51 @@ gpsd_adaptor = None
 # Temporary frequency block list
 # This contains frequncies that should be blocked for a short amount of time.
 temporary_block_list = {}
+
+
+def time_slice_enabled():
+    """Return whether the single-tuner RTL-TCP scheduler is active."""
+    return autorx.time_slice_scheduler is not None
+
+
+def queue_time_slice_actions(actions):
+    """Queue scheduler actions for serialized execution in the main loop."""
+    actions = tuple(actions or ())
+    if actions:
+        autorx.time_slice_actions.put(actions)
+
+
+def handle_time_slice_scan_detection(results, scan_generation):
+    """Forward scanner detections to the scheduler without owning the tuner."""
+    scheduler = autorx.time_slice_scheduler
+    if scheduler is None:
+        return
+    for result in results:
+        try:
+            frequency = int(float(result[0]))
+            sonde_type = str(result[1])
+        except (IndexError, TypeError, ValueError):
+            logging.error("TimeSlice - ignoring malformed scan result %r", result)
+            continue
+        queue_time_slice_actions(
+            scheduler.on_scan_detection(frequency, sonde_type, scan_generation)
+        )
+
+
+def handle_time_slice_scan_complete(seen_frequencies, scan_generation):
+    """Forward a complete discovery cycle to the scheduler."""
+    scheduler = autorx.time_slice_scheduler
+    if scheduler is not None:
+        queue_time_slice_actions(
+            scheduler.on_scan_cycle_complete(seen_frequencies, scan_generation)
+        )
+
+
+def handle_time_slice_valid_frame(slice_id):
+    """Forward valid decoder frames to the scheduler."""
+    scheduler = autorx.time_slice_scheduler
+    if scheduler is not None and slice_id is not None:
+        queue_time_slice_actions(scheduler.on_valid_frame(slice_id))
 
 
 def allocate_sdr(check_only=False, task_description=""):
@@ -149,10 +196,32 @@ def start_scanner():
         # Create entry in task list.
         autorx.task_list["SCAN"] = {"device_idx": _device_idx, "task": None}
 
+        scanner_callback = autorx.scan_results.put
+        cycle_completion_callback = None
+        known_candidates = None
+        scan_generation = 0
+        if time_slice_enabled():
+            status = autorx.time_slice_scheduler.get_status()
+            scan_generation = status["scan_generation"]
+            scanner_callback = lambda results: handle_time_slice_scan_detection(
+                results, scan_generation
+            )
+            cycle_completion_callback = handle_time_slice_scan_complete
+            known_candidates = autorx.time_slice_scheduler.get_known_candidates()
+            if (
+                scan_generation > 0
+                and scan_generation % TIME_SLICE_REDETECT_INTERVAL == 0
+            ):
+                logging.info(
+                    "TimeSlice - revalidating known candidate types in scan generation %d.",
+                    scan_generation,
+                )
+                known_candidates = {}
+
         # Init Scanner using settings from the global config.
         # TODO: Nicer way of passing in the huge list of args.
         autorx.task_list["SCAN"]["task"] = SondeScanner(
-            callback=autorx.scan_results.put,
+            callback=scanner_callback,
             auto_start=True,
             min_freq=config["min_freq"],
             max_freq=config["max_freq"],
@@ -186,6 +255,9 @@ def start_scanner():
             temporary_block_list=temporary_block_list,
             temporary_block_time=config["temporary_block_time"],
             max_async_scan_workers=config["max_async_scan_workers"],
+            cycle_completion_callback=cycle_completion_callback,
+            known_candidates=known_candidates,
+            scan_generation=scan_generation,
         )
 
         # Add a reference into the sdr_list entry
@@ -225,7 +297,7 @@ def get_random_number():
     return (get_random_number.seed % 300) + 1
 
 
-def start_decoder(freq, sonde_type, continuous=False):
+def start_decoder(freq, sonde_type, continuous=False, slice_id=None):
     """Attempt to start a decoder thread for a given sonde.
 
     Args:
@@ -240,10 +312,13 @@ def start_decoder(freq, sonde_type, continuous=False):
         freq = float(freq)
     except (TypeError, ValueError):
         logging.error("Task Manager - Ignoring decoder request with invalid frequency %r", freq)
-        return
+        return False
     if not math.isfinite(freq) or freq <= 0:
         logging.error("Task Manager - Ignoring decoder request with non-finite or non-positive frequency %r", freq)
-        return
+        return False
+    if str(sonde_type).lstrip("-") not in VALID_SONDE_TYPES:
+        logging.error("Task Manager - Ignoring unsupported sonde type %r", sonde_type)
+        return False
 
     # Allocate a SDR.
     _device_idx = allocate_sdr(
@@ -252,10 +327,14 @@ def start_decoder(freq, sonde_type, continuous=False):
 
     if _device_idx is None:
         logging.error("Could not allocate SDR for decoder!")
-        return
+        return False
     else:
         # Add an entry to the task list
-        autorx.task_list[freq] = {"device_idx": _device_idx, "task": None}
+        autorx.task_list[freq] = {
+            "device_idx": _device_idx,
+            "task": None,
+            "slice_id": slice_id,
+        }
 
         # Set the SDR to in-use
         autorx.sdr_list[_device_idx]["in_use"] = True
@@ -304,12 +383,127 @@ def start_decoder(freq, sonde_type, continuous=False):
             experimental_decoder=config["experimental_decoders"][_exp_sonde_type],
             save_raw_hex=config["save_raw_hex"],
             wideband_sondes=config["wideband_sondes"],
-            close_on_encrypted=config["close_on_encrypted"]
+            close_on_encrypted=config["close_on_encrypted"],
+            valid_frame_callback=(
+                handle_time_slice_valid_frame if slice_id is not None else None
+            ),
+            slice_id=slice_id,
         )
         autorx.sdr_list[_device_idx]["task"] = autorx.task_list[freq]["task"]
 
     # Indicate to the web client that the task list has been updated.
     flask_emit_event("task_event")
+    return True
+
+
+def stop_time_slice_decoder(slice_id):
+    """Stop and release the decoder that owns a scheduler slice."""
+    for frequency, entry in list(autorx.task_list.items()):
+        if frequency == "SCAN" or entry.get("slice_id") != slice_id:
+            continue
+        device_idx = entry["device_idx"]
+        try:
+            entry["task"].stop(join_timeout=5.0)
+        finally:
+            try:
+                shutdown_sdr(
+                    config["sdr_type"],
+                    device_idx,
+                    sdr_hostname=config["sdr_hostname"],
+                    frequency=frequency,
+                )
+            except Exception as error:
+                logging.error(
+                    "TimeSlice - SDR shutdown failed for %.3f MHz: %s",
+                    frequency / 1e6,
+                    error,
+                )
+            autorx.sdr_list[device_idx]["in_use"] = False
+            autorx.sdr_list[device_idx]["task"] = None
+            autorx.task_list.pop(frequency, None)
+            flask_emit_event("task_event")
+        return True
+    return False
+
+
+def execute_time_slice_actions():
+    """Execute all pending scheduler actions in FIFO order."""
+    while True:
+        try:
+            queued_actions = autorx.time_slice_actions.get_nowait()
+        except Empty:
+            return
+
+        if isinstance(queued_actions, dict):
+            scheduler = autorx.time_slice_scheduler
+            if scheduler is None:
+                continue
+            command = queued_actions.get("command")
+            if command == "skip":
+                queued_actions = scheduler.skip_current()
+            elif command == "rescan":
+                queued_actions = scheduler.request_rescan()
+            elif command == "add_candidate":
+                scheduler.add_candidate(
+                    queued_actions["frequency"],
+                    queued_actions["sonde_type"],
+                )
+                continue
+            else:
+                logging.error("TimeSlice - ignored unknown command %r", command)
+                continue
+
+        if isinstance(queued_actions, (list, tuple)):
+            actions = list(queued_actions)
+        else:
+            actions = [queued_actions]
+
+        for action_index, action in enumerate(actions):
+            scheduler = autorx.time_slice_scheduler
+            if action.kind == ActionKind.START_DECODER and scheduler is not None:
+                status = scheduler.get_status()
+                if (
+                    status["current_slice_id"] != action.slice_id
+                    or status["state"] not in ("acquiring", "decoding")
+                ):
+                    logging.debug(
+                        "TimeSlice - ignored stale START_DECODER action for slice %s.",
+                        action.slice_id,
+                    )
+                    continue
+
+            if (
+                autorx.scan_inhibit
+                and action.kind in (ActionKind.START_SCAN, ActionKind.START_DECODER)
+            ):
+                autorx.time_slice_actions.put(tuple(actions[action_index:]))
+                return
+
+            if action.kind == ActionKind.STOP_SCAN:
+                stop_scanner()
+            elif action.kind == ActionKind.START_SCAN:
+                if "SCAN" in autorx.task_list:
+                    stop_scanner()
+                start_scanner()
+            elif action.kind == ActionKind.STOP_DECODER:
+                stop_time_slice_decoder(action.slice_id)
+            elif action.kind == ActionKind.START_DECODER:
+                if "SCAN" in autorx.task_list:
+                    stop_scanner()
+                started = start_decoder(
+                    action.frequency,
+                    action.sonde_type,
+                    slice_id=action.slice_id,
+                )
+                scheduler = autorx.time_slice_scheduler
+                if started and scheduler is not None:
+                    queue_time_slice_actions(
+                        scheduler.on_decoder_started(action.slice_id)
+                    )
+                elif not started and scheduler is not None:
+                    queue_time_slice_actions(
+                        scheduler.on_decoder_complete(action.slice_id)
+                    )
 
 
 def handle_scan_results():
@@ -320,6 +514,36 @@ def handle_scan_results():
     - If there is no free SDR, but a scanner is running, stop the scanner and start decoding.
     """
     global config, temporary_block_list
+
+    if time_slice_enabled():
+        while autorx.scan_results.qsize() > 0:
+            scan_data = autorx.scan_results.get()
+            for sonde in scan_data:
+                try:
+                    frequency = int(float(sonde[0]))
+                    sonde_type = str(sonde[1])
+                except (IndexError, TypeError, ValueError):
+                    logging.error("Task Manager - Ignoring malformed scan result %r", sonde)
+                    continue
+                check_type = sonde_type.lstrip("-")
+                if (
+                    frequency <= 0
+                    or check_type not in VALID_SONDE_TYPES
+                ):
+                    logging.error("Task Manager - Ignoring invalid time-slice candidate %r", sonde)
+                    continue
+                logging.info(
+                    "Task Manager - Queued %s candidate on %.3f MHz for time slicing.",
+                    check_type,
+                    frequency / 1e6,
+                )
+                queue_time_slice_actions(
+                    autorx.time_slice_scheduler.add_candidate(
+                        frequency,
+                        sonde_type,
+                    )
+                )
+        return
 
     if autorx.scan_results.qsize() > 0:
         # Grab the latest detections from the scan result queue.
@@ -441,6 +665,7 @@ def clean_task_list():
     """Check the task list to see if any tasks have stopped running. If so, release the associated SDR"""
 
     for _key in autorx.task_list.copy().keys():
+        _slice_id = autorx.task_list[_key].get("slice_id")
         # Attempt to get the state of the task
         try:
             _running = autorx.task_list[_key]["task"].running()
@@ -511,6 +736,10 @@ def clean_task_list():
             autorx.task_list.pop(_key)
             # Indicate to the web client that the task list has been updated.
             flask_emit_event("task_event")
+            if _slice_id is not None and time_slice_enabled():
+                queue_time_slice_actions(
+                    autorx.time_slice_scheduler.on_decoder_complete(_slice_id)
+                )
 
     # Clean out the temporary block list of old entries.
     for _freq in temporary_block_list.copy().keys():
@@ -526,10 +755,15 @@ def clean_task_list():
     # Check if there is a scanner thread still running.
     # If not, and if there is a SDR free, start one up again.
     # Also check for a global scan inhibit flag.
+    _scheduler_allows_scan = (
+        not time_slice_enabled()
+        or autorx.time_slice_scheduler.get_status()["state"] == "scanning"
+    )
     if (
         ("SCAN" not in autorx.task_list)
         and (not autorx.scan_inhibit)
         and (allocate_sdr(check_only=True) is not None)
+        and _scheduler_allows_scan
     ):
         # We have a SDR free, and we are not running a scan thread. Start one.
         start_scanner()
@@ -559,6 +793,12 @@ def stop_all():
     """Shut-down all decoders, scanners, and exporters."""
     global exporter_objects
     logging.info("Starting shutdown of all threads.")
+    autorx.time_slice_scheduler = None
+    while not autorx.time_slice_actions.empty():
+        try:
+            autorx.time_slice_actions.get_nowait()
+        except Empty:
+            break
     for _task in autorx.task_list.keys():
         try:
             autorx.task_list[_task]["task"].stop()
@@ -919,6 +1159,24 @@ def main():
         config = _temp_cfg
         autorx.sdr_list = config["sdr_settings"]
 
+    while not autorx.time_slice_actions.empty():
+        autorx.time_slice_actions.get_nowait()
+    if config.get("time_slice_enabled", False):
+        autorx.time_slice_scheduler = TimeSliceScheduler(
+            acquire_timeout=config["time_slice_acquire_timeout"],
+            decode_time=config["time_slice_decode_time"],
+            hard_limit=config["time_slice_hard_limit"],
+        )
+        logging.info(
+            "TimeSlice - enabled for one RTL-TCP tuner "
+            "(acquire %.1fs, decode %.1fs, hard limit %.1fs).",
+            config["time_slice_acquire_timeout"],
+            config["time_slice_decode_time"],
+            config["time_slice_hard_limit"],
+        )
+    else:
+        autorx.time_slice_scheduler = None
+
 
     # Apply any logging changes based on configuration file settings.
     if config["save_system_log"]:
@@ -1168,8 +1426,14 @@ def main():
         # handle_scan_results() checks qsize and processes all available results
         handle_scan_results()
 
+        execute_time_slice_actions()
+
         # Check for finished tasks
         clean_task_list()
+
+        if time_slice_enabled():
+            queue_time_slice_actions(autorx.time_slice_scheduler.tick())
+            execute_time_slice_actions()
 
         if len(autorx.sdr_list) == 0:
             # No Functioning SDRs!

@@ -80,6 +80,8 @@ function disable_web_controls(){
     $("#stop-decoder-lockout").prop('disabled', true);
     $("#enable-scanner").prop('disabled', true);
     $("#disable-scanner").prop('disabled', true);
+    $("#time-slice-skip").prop('disabled', true);
+    $("#time-slice-rescan").prop('disabled', true);
     $("#frequency-input").prop('disabled', true);
     $("#sonde-type-select").prop('disabled', true);
     $("#stop-frequency-select").prop('disabled', true);   
@@ -94,6 +96,8 @@ function pause_web_controls() {
     $("#stop-decoder-lockout").prop('disabled', true);
     $("#enable-scanner").prop('disabled', true);
     $("#disable-scanner").prop('disabled', true);
+    $("#time-slice-skip").prop('disabled', true);
+    $("#time-slice-rescan").prop('disabled', true);
     $("#frequency-input").prop('disabled', true);
     $("#sonde-type-select").prop('disabled', true);
     $("#stop-frequency-select").prop('disabled', true);
@@ -111,6 +115,8 @@ function resume_web_controls() {
     $("#stop-decoder-lockout").prop('disabled', false);
     $("#enable-scanner").prop('disabled', false);
     $("#disable-scanner").prop('disabled', false);
+    $("#time-slice-skip").prop('disabled', false);
+    $("#time-slice-rescan").prop('disabled', false);
     $("#frequency-input").prop('disabled', false);
     $("#sonde-type-select").prop('disabled', false);
     $("#stop-frequency-select").prop('disabled', false);
@@ -230,6 +236,59 @@ function enable_scanner(){
             $("#password-header").html("<h2>Incorrect Password</h2>");
         }
     });
+}
+
+function update_time_slice_status(){
+    $.getJSON("time_slice_status", function(data){
+        if(!data.enabled){
+            $("#time-slice-status").hide();
+            $("#time-slice-controls").hide();
+            return;
+        }
+
+        $("#time-slice-status").show();
+        $("#time-slice-controls").show();
+        var current = data.current_frequency === null
+            ? "-"
+            : (data.current_frequency / 1e6).toFixed(3) + " MHz";
+        var next = data.next_frequency === null
+            ? "-"
+            : (data.next_frequency / 1e6).toFixed(3) + " MHz";
+        var remaining = data.remaining_seconds === null
+            ? "-"
+            : data.remaining_seconds.toFixed(1) + " s";
+        $("#time-slice-status-text").text(
+            data.state.toUpperCase() + " | Current " + current +
+            " | Next " + next + " | Rotation " + data.rotation +
+            " | " + data.served_count + "/" + data.candidate_count +
+            " | Remaining " + remaining
+        );
+    });
+}
+
+function time_slice_control(endpoint){
+    verify_password();
+    $.post(
+        endpoint,
+        {password: getCookie("password")},
+        function(){
+            pause_web_controls();
+            setTimeout(resume_web_controls, 2000);
+            setTimeout(update_time_slice_status, 250);
+        }
+    ).fail(function(xhr, status, error){
+        if(error == "FORBIDDEN"){
+            $("#password-header").html("<h2>Incorrect Password</h2>");
+        }
+    });
+}
+
+function time_slice_skip(){
+    time_slice_control("time_slice_skip");
+}
+
+function time_slice_rescan(){
+    time_slice_control("time_slice_rescan");
 }
 
 function stop_decoder(){

@@ -12,7 +12,7 @@ from queue import Queue
 # MINOR - New sonde type support, other fairly big changes that may result in telemetry or config file incompatability issus.
 # PATCH - Small changes, or minor feature additions.
 
-__version__ = "1.9.0-beta18"
+__version__ = "1.9.0-beta21"
 
 # Global Variables
 
@@ -41,6 +41,10 @@ task_list = {}
 
 # Scan result queue.
 scan_results = Queue()
+# Time-slice actions are produced by scanner, decoder, and web threads, then
+# executed serially by the main task-manager loop.
+time_slice_actions = Queue()
+time_slice_scheduler = None
 # Global scan inhibit flag, used by web interface.
 scan_inhibit = False
 

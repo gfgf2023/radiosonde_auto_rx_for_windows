@@ -27,3 +27,14 @@ def test_gth_detector_matches_the_proven_decoder_sync_profile():
         r'.*"CF6GTH"',
         detector,
     )
+
+
+def test_dft_detector_rejects_zero_energy_correlation_windows():
+    detector = (ROOT / "scan" / "dft_detect.c").read_text()
+
+    assert re.search(
+        r"xnorm\s*=\s*sqrt\(xnorm\);\s*"
+        r"if\s*\(xnorm\s*<=\s*0\.0\)\s*return\s+-4;\s*"
+        r"mx\s*/=\s*xnorm\s*\*\s*N_DFT;",
+        detector,
+    )

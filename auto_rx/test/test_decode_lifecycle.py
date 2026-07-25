@@ -82,3 +82,30 @@ def test_decoder_rejects_windows_percent_command_before_popen(monkeypatch):
 
     with pytest.raises(ValueError, match="percent"):
         decoder.decoder_thread()
+
+
+def test_time_slice_stop_forces_a_hung_decoder_process(monkeypatch):
+    class HungThread:
+        def __init__(self):
+            self.joins = []
+
+        def join(self, timeout=None):
+            self.joins.append(timeout)
+
+        def is_alive(self):
+            return True
+
+    decoder = decode.SondeDecoder.__new__(decode.SondeDecoder)
+    decoder.decoder_running = True
+    decoder.decoder = HungThread()
+    decoder.decode_process = object()
+    decoder.experimental_decoder = False
+    decoder.raw_file = None
+    decoder.log_error = lambda *args: None
+    terminated = []
+    monkeypatch.setattr(decode.platform, "terminate_process_tree", terminated.append)
+
+    decoder.stop(join_timeout=0.1)
+
+    assert decoder.decoder.joins == [0.1, 2.0]
+    assert terminated == [decoder.decode_process]

@@ -142,6 +142,11 @@ def read_auto_rx_config(filename, no_sdr_test=False):
         "decoder_stats": False,
         "max_async_scan_workers": 4,
         "ngp_tweak": False,
+        # Time-Slice Settings (for single RTL-TCP tuner)
+        "time_slice_enabled": False,
+        "time_slice_acquire_timeout": 10.0,
+        "time_slice_decode_time": 15.0,
+        "time_slice_hard_limit": 25.0,
         # Rotator Settings
         "enable_rotator": False,
         "rotator_update_rate": 30,
@@ -383,6 +388,25 @@ def read_auto_rx_config(filename, no_sdr_test=False):
             logging.warning(f"Config - max_async_scan_workers capped at 32 (was {_max_workers})")
             _max_workers = 32
         auto_rx_config["max_async_scan_workers"] = _max_workers
+
+        # Time-Slice Settings (RTL-TCP single tuner mode). Missing settings use
+        # defaults for old configuration files; malformed values fail parsing.
+        if config.has_option("advanced", "time_slice_enabled"):
+            auto_rx_config["time_slice_enabled"] = config.getboolean(
+                "advanced", "time_slice_enabled"
+            )
+        if config.has_option("advanced", "time_slice_acquire_timeout"):
+            auto_rx_config["time_slice_acquire_timeout"] = config.getfloat(
+                "advanced", "time_slice_acquire_timeout"
+            )
+        if config.has_option("advanced", "time_slice_decode_time"):
+            auto_rx_config["time_slice_decode_time"] = config.getfloat(
+                "advanced", "time_slice_decode_time"
+            )
+        if config.has_option("advanced", "time_slice_hard_limit"):
+            auto_rx_config["time_slice_hard_limit"] = config.getfloat(
+                "advanced", "time_slice_hard_limit"
+            )
 
         # Rotator Settings
         auto_rx_config["rotator_enabled"] = config.getboolean(
@@ -1032,6 +1056,14 @@ def read_auto_rx_config(filename, no_sdr_test=False):
             global_config.pop("web_password")
 
             web_password = auto_rx_config["web_password"]
+
+            # Validate time-slice configuration if enabled
+            try:
+                from .time_slice import validate_time_slice_config
+                validate_time_slice_config(auto_rx_config)
+            except ValueError as e:
+                logging.error(f"Config - Time-slice configuration error: {e}")
+                raise SystemError(f"Invalid time-slice configuration: {e}")
 
             return auto_rx_config
     except SystemError as e:

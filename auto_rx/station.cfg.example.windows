@@ -96,6 +96,13 @@ temporary_block_time = 60
 decoder_spacing_limit = 15000
 synchronous_upload = False
 max_async_scan_workers = 4
+
+# Rotate one RTL-TCP tuner across all detected radiosondes. Leave disabled for
+# a local RTL-SDR. Enabling requires RTL_TCP, one SDR, and always_decode = [].
+time_slice_enabled = False
+time_slice_acquire_timeout = 10
+time_slice_decode_time = 15
+time_slice_hard_limit = 25
 # These paths are relative to the auto_rx directory in the Windows release.
 sdr_fm_path = ..\\bin\\rtl_fm.exe
 sdr_power_path = ..\\bin\\rtl_power.exe
