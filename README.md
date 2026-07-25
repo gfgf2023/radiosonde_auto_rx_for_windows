@@ -70,7 +70,7 @@ From PowerShell, build the ZIP with:
 .\build-windows.ps1
 ```
 
-Use `-Version 1.9.0-beta18`, `-MakeCommand`, or `-Compiler` when the local tool
+Use `-Version 1.9.0-beta21`, `-MakeCommand`, or `-Compiler` when the local tool
 names differ. The resulting `release/windows/auto_rx-windows-<version>.zip`
 contains `auto_rx/`, the 18 decoder executables and receiver tools in `bin/`,
 plus `start-auto-rx.cmd` and `diagnose.cmd`. Pass `-KeepRelease` to retain the
@@ -137,6 +137,33 @@ manual web request.
 RTL-TCP scanning also confirms each 400 MHz peak with a short GTH/CF6 decoder
 probe. A CRC-valid telemetry frame takes priority over the generic correlation
 detector and starts the normal decoder automatically.
+
+One RTL-TCP server exposes only one tuner. To receive several active sondes
+with that tuner, enable time slicing in `[advanced]`:
+
+```ini
+time_slice_enabled = True
+time_slice_acquire_timeout = 10
+time_slice_decode_time = 15
+time_slice_hard_limit = 25
+```
+
+Time slicing completes a discovery scan, gives each detected signal a bounded
+decoder slot, and performs a fresh scan after every rotation. New candidates
+are tried first and confirmed candidates are served fairly. A candidate is
+removed only after it is absent from two complete scans; decode failures do not
+create a permanent interference block. The default timing supports roughly
+four to eight active sondes with a full rotation near three minutes.
+Only candidates that have produced valid telemetry reuse their known type, and
+the scanner periodically revalidates all types so a different sonde on the same
+frequency can be discovered.
+
+The web task area shows the current state, frequency, next candidate, rotation
+progress, and remaining slot time. After authenticating in Advanced Controls,
+use `Skip` to move to the next candidate or `Rescan` to start discovery again.
+Time slicing requires `sdr_type = RTL_TCP`, `sdr_quantity = 1`, and
+`always_decode = []`. Leave it disabled for a local USB RTL-SDR or multi-SDR
+configuration.
 
 When using the web interface's manual decoder control, enter a positive finite
 frequency in Hz, for example `401500000`. Invalid values such as `nan` are
