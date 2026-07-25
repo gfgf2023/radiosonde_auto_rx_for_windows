@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from autorx import config
+from autorx import decode
 from autorx import scan
 from autorx import sdr_wrappers
 from autorx.rtl_tcp_rx import configure_client, parse_args, stream_iq
@@ -197,6 +198,58 @@ def test_rtl_tcp_fm_command_demodulates_the_bridge_iq_with_iq_dec(monkeypatch):
     assert "./iq_dec --bo 16 --IFbw 48 --FM - 240000 16" in command
     assert "sox -t raw -r 48000" in command
     assert "rtl_fm" not in command
+
+
+def test_rtl_tcp_gth_decoder_uses_its_native_iq_decimator(monkeypatch):
+    monkeypatch.setattr(sdr_wrappers.sys, "executable", "/opt/auto-rx/bin/python3")
+    decoder = decode.SondeDecoder.__new__(decode.SondeDecoder)
+    decoder.sonde_type = "CF6GTH"
+    decoder.sdr_type = "RTL_TCP"
+    decoder.sonde_freq = 400_440_000
+    decoder.sdr_hostname = "rtl.example"
+    decoder.sdr_port = 1234
+    decoder.ss_iq_path = "./ss_iq"
+    decoder.rtl_device_idx = 0
+    decoder.rtl_fm_path = "rtl_fm"
+    decoder.ppm = 0
+    decoder.gain = -2
+    decoder.bias = False
+    decoder.save_decode_iq = False
+
+    command = decoder.generate_decoder_command()
+
+    assert "--sample-rate 240000" in command
+    assert "./iq_dec" not in command
+    assert "./cf06ht03mod --json --IQ 0.0 --lpbw 12 --dc  - 240000 16" in command
+
+
+def test_rtl_tcp_detection_uses_dft_detect_native_iq_decimator(monkeypatch):
+    captured = {}
+    commands = []
+
+    def get_iq_command(**kwargs):
+        captured.update(kwargs)
+        return "source | "
+
+    monkeypatch.setattr(scan, "get_sdr_iq_cmd", get_iq_command)
+    monkeypatch.setattr(scan, "get_sdr_name", lambda *args, **kwargs: "RTL-TCP")
+    monkeypatch.setattr(scan, "shutdown_sdr", lambda *args, **kwargs: None)
+
+    def run_command(command, **kwargs):
+        commands.append(command)
+        raise subprocess.CalledProcessError(1, command, output=b"")
+
+    monkeypatch.setattr(scan.autorx_platform, "run_command", run_command)
+
+    assert scan.detect_sonde(
+        400_440_000,
+        sdr_type="RTL_TCP",
+        sdr_hostname="rtl.example",
+        sdr_port=1234,
+    ) == (None, 0.0)
+
+    assert captured["sample_rate"] == 240_000
+    assert "-t 10 --IQ 0.0 --bw 15 --dc - 240000 16" in commands[0]
 
 
 def test_detect_sonde_forwards_rtl_tcp_endpoint_to_lms6_fm_source(monkeypatch):

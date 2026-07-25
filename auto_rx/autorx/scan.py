@@ -534,11 +534,12 @@ def detect_sonde(
         # IQ decoding
         _timeout = dwell_time * 2
         rx_test_command = timeout_cmd(_timeout)
+        _input_iq_bw = 240000 if sdr_type == "RTL_TCP" else _iq_bw
 
         rx_test_command += get_sdr_iq_cmd(
             sdr_type=sdr_type,
             frequency=frequency,
-            sample_rate=_iq_bw,
+            sample_rate=_input_iq_bw,
             rtl_device_idx = rtl_device_idx,
             rtl_fm_path = rtl_fm_path,
             ppm = ppm,
@@ -573,13 +574,15 @@ def detect_sonde(
             rs_path, autorx_platform.resolve_executable("dft_detect")
         )
         exclude_types_option = f" {exclude_types_str}" if exclude_types_str else ""
+        detector_iq_option = "--IQ 0.0" if sdr_type == "RTL_TCP" else "--iq"
         rx_test_command += autorx_platform.quote_command_argument(
             dft_detect_path
-        ) + " -t %d --iq --bw %d --dc%s - %d 16 2>/dev/null" % (
+        ) + " -t %d %s --bw %d --dc%s - %d 16 2>/dev/null" % (
             dwell_time,
+            detector_iq_option,
             _if_bw,
             exclude_types_option,
-            _iq_bw,
+            _input_iq_bw,
         )
 
     elif _mode == "FM":

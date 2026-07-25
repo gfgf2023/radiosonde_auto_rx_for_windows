@@ -840,7 +840,10 @@ class SondeDecoder(object):
         elif self.sonde_type == "CF6GTH":
             # Changfeng CF-06 and similar formats (GTH6, HT-03))
 
-            _sample_rate = 48000
+            # The GTH decoder has its own baseband decimator.  Feed RTL-TCP's
+            # supported hardware rate directly so the GFSK waveform is only
+            # filtered and decimated once.
+            _sample_rate = 240000 if self.sdr_type == "RTL_TCP" else 48000
 
             decode_cmd = get_sdr_iq_cmd(
                 sdr_type = self.sdr_type,
