@@ -391,19 +391,23 @@ def read_auto_rx_config(filename, no_sdr_test=False):
 
         # Time-Slice Settings (RTL-TCP single tuner mode). Missing settings use
         # defaults for old configuration files; malformed values fail parsing.
-        if config.has_option("advanced", "time_slice_enabled"):
+        # ``has_option`` also checks RawConfigParser defaults. Those defaults
+        # contain Python booleans, whereas getboolean expects config text.
+        # Inspect the parsed section so old station.cfg files remain valid.
+        _advanced_options = config._sections.get("advanced", {})
+        if "time_slice_enabled" in _advanced_options:
             auto_rx_config["time_slice_enabled"] = config.getboolean(
                 "advanced", "time_slice_enabled"
             )
-        if config.has_option("advanced", "time_slice_acquire_timeout"):
+        if "time_slice_acquire_timeout" in _advanced_options:
             auto_rx_config["time_slice_acquire_timeout"] = config.getfloat(
                 "advanced", "time_slice_acquire_timeout"
             )
-        if config.has_option("advanced", "time_slice_decode_time"):
+        if "time_slice_decode_time" in _advanced_options:
             auto_rx_config["time_slice_decode_time"] = config.getfloat(
                 "advanced", "time_slice_decode_time"
             )
-        if config.has_option("advanced", "time_slice_hard_limit"):
+        if "time_slice_hard_limit" in _advanced_options:
             auto_rx_config["time_slice_hard_limit"] = config.getfloat(
                 "advanced", "time_slice_hard_limit"
             )

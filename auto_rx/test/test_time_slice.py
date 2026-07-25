@@ -2,7 +2,10 @@
 
 All tests use a fake monotonic clock so no real time passes.
 """
+from pathlib import Path
+
 import pytest
+from autorx import config as autorx_config
 from autorx.time_slice import (
     ActionKind,
     CandidateState,
@@ -604,3 +607,21 @@ def test_validate_disabled_config_skips_all_checks():
         "always_decode": [401_000_000],
     }
     validate_time_slice_config(config)  # must not raise
+
+
+def test_legacy_station_config_uses_disabled_time_slice_defaults(tmp_path):
+    source = Path(autorx_config.__file__).resolve().parents[1] / "station.cfg.example"
+    legacy_lines = [
+        line
+        for line in source.read_text().splitlines()
+        if not line.strip().startswith("time_slice_")
+    ]
+    legacy_config = tmp_path / "station.cfg"
+    legacy_config.write_text("\n".join(legacy_lines) + "\n")
+
+    result = autorx_config.read_auto_rx_config(
+        str(legacy_config),
+        no_sdr_test=True,
+    )
+
+    assert result["time_slice_enabled"] is False

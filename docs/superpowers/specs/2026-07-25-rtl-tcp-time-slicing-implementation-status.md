@@ -1,6 +1,6 @@
 # RTL-TCP Time-Slicing Implementation Status
 
-Status: Complete for the 1.9.0-beta21 Windows release.
+Status: Complete for the 1.9.0-beta22 Windows release.
 
 ## Delivered
 
@@ -41,7 +41,7 @@ enabled with `sdr_type = RTL_TCP`, `sdr_quantity = 1`, and `always_decode = []`.
   restarts, pause/resume behavior, bounded decoder shutdown, Web authorization,
   manual type validation, and disabled status.
 - The full Python suite and native Windows build are required immediately
-  before publishing beta21.
+  before publishing beta22.
 
 Hardware validation with a live RTL-TCP server and several simultaneous sondes
 remains an operational post-release check; it is not simulated by the unit test
